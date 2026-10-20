@@ -1,0 +1,12 @@
+.venv/
+.venv311/
+__pycache__/
+*.pyc
+.env
+resumes/*
+!resumes/.gitkeep
+data/*.db
+logs/*
+!logs/.gitkeep
+data/*.json
+.env

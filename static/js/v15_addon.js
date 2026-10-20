@@ -1,0 +1,7 @@
+// Add-on for existing working app.js. Reference this AFTER app.js if merging manually.
+async function v15LoadPreferences(){const r=await fetch('/api/preferences'),p=await r.json();if(document.getElementById('preferredRole'))preferredRole.value=p.preferred_role||'';if(document.getElementById('preferredLocation'))preferredLocation.value=(p.preferred_locations||[])[0]||'';if(document.getElementById('minimumMatch'))minimumMatch.value=p.minimum_match??80}
+async function v15SavePreferences(){await fetch('/api/preferences',{method:'PUT',headers:{'Content-Type':'application/json'},body:JSON.stringify({preferred_role:document.getElementById('preferredRole')?.value||'',preferred_locations:[document.getElementById('preferredLocation')?.value||''].filter(Boolean),minimum_match:Number(document.getElementById('minimumMatch')?.value||80),work_modes:[],excluded_companies:[]})})}
+async function v15Queue(){const r=await fetch('/api/jobs/queue'),rows=await r.json();return rows}
+async function v15Status(id,status){return fetch(`/api/jobs/queue/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})})}
+async function v15Dashboard(){const r=await fetch('/api/jobs/dashboard');return r.json()}
+window.v15LoadPreferences=v15LoadPreferences;window.v15SavePreferences=v15SavePreferences;window.v15Queue=v15Queue;window.v15Status=v15Status;window.v15Dashboard=v15Dashboard;
