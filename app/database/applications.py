@@ -1,20 +1,18 @@
-from pathlib import Path
-import json
-from datetime import datetime, timezone
-BASE_DIR = Path(__file__).resolve().parents[2]
-DB = BASE_DIR / "data" / "applications.json"
-DB.parent.mkdir(exist_ok=True)
+from sqlalchemy import select
+from app.database.db import session
+from app.database.tables import Application
 
-def _load():
-    if not DB.exists(): return []
-    try: return json.loads(DB.read_text(encoding="utf-8"))
-    except Exception: return []
-
-def list_applications(): return _load()
+def list_applications():
+    with session() as s:
+        rows = s.scalars(select(Application).order_by(Application.id.desc())).all()
+        return [{**r.data, 'applied_at': r.applied_at.isoformat()} for r in rows]
 
 def save_application(item: dict):
-    rows = _load(); url = (item.get("job_url") or "").strip()
-    if url and any((r.get("job_url") or "").strip() == url for r in rows):
-        return None
-    item = dict(item); item["applied_at"] = datetime.now(timezone.utc).isoformat(); rows.insert(0, item)
-    DB.write_text(json.dumps(rows, indent=2), encoding="utf-8"); return item
+    url = (item.get('job_url') or '').strip()
+    with session() as s:
+        if url and s.scalar(select(Application.id).where(Application.job_url == url)) is not None:
+            return None
+        row = Application(job_url=url, data=dict(item))
+        s.add(row)
+        s.flush()
+        return {**item, 'applied_at': row.applied_at.isoformat()}

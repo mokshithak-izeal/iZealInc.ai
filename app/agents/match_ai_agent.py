@@ -11,6 +11,7 @@ from typing import Literal
 from pydantic import BaseModel, Field
 from google import genai
 from google.genai import types
+from app.agents.gemini_retry import with_retry
 
 
 class SkillAssessment(BaseModel):
@@ -67,7 +68,7 @@ def analyze_semantic_match(candidate_profile: dict, job_profile: dict, job_descr
         "job_profile": job_profile,
         "job_description": job_description,
     }
-    response = client.models.generate_content(
+    response = with_retry(lambda: client.models.generate_content(
         model=os.getenv("GEMINI_MODEL", "gemini-3.8-flash"),
         contents=f"{MATCH_SYSTEM_PROMPT}\n\nINPUT JSON:\n{json.dumps(payload, ensure_ascii=False, default=str)}",
         config=types.GenerateContentConfig(
@@ -75,7 +76,7 @@ def analyze_semantic_match(candidate_profile: dict, job_profile: dict, job_descr
             response_mime_type="application/json",
             response_schema=SemanticMatchAssessment,
         ),
-    )
+    ))
     if response.parsed is not None:
         return response.parsed
     return SemanticMatchAssessment.model_validate_json(response.text)

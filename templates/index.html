@@ -18,6 +18,7 @@
     </nav>
   </aside>
   <main class="content">
+    <div class="page-header" style="justify-content:flex-end;margin-bottom:0"><button type="button" class="secondary-button" onclick="fetch('/api/auth/logout', {method: 'POST'}).then(() => location = '/login')">Sign out</button></div>
     <section id="dashboard" class="page active">
       <div class="page-header"><div><h1>Dashboard</h1><p>AI-powered resume and job matching</p></div><button class="primary-button" onclick="openCandidatePage()">Analyze Resume</button></div>
       <div class="stats">

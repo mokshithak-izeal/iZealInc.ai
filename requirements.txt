@@ -4,8 +4,10 @@ jinja2
 python-multipart
 pydantic
 sqlalchemy
+psycopg2-binary
 pymupdf
 python-docx
 python-dotenv
-
 google-genai<3.0.0
+bcrypt
+itsdangerous

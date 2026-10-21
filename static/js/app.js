@@ -1,3 +1,10 @@
+const _fetch = window.fetch;
+window.fetch = async (...args) => {
+  const r = await _fetch(...args);
+  if (r.status === 401) location = '/login';
+  return r;
+};
+
 let candidateProfile = null;
 let lastMatch = null;
 

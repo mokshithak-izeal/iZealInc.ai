@@ -10,3 +10,5 @@ logs/*
 !logs/.gitkeep
 data/*.json
 .env
+.neon
+node_modules/

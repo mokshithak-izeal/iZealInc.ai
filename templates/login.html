@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Sign in to Job Agent</title>
+<link rel='stylesheet' href='/static/css/auth.css'>
+</head>
+<body>
+<div class='auth-shell'>
+  <aside class='auth-brand'>
+    <div class='brand'><div class='brand-icon'>AI</div><div><h2>Job Agent</h2><span>AI Job Assistant</span></div></div>
+    <div class='auth-pitch'>
+      <h2>Match resumes to jobs, skill by skill.</h2>
+      <p>Upload a resume, paste a job description, and see which requirements the candidate meets and which are missing.</p>
+    </div>
+    <p class='auth-note'>Sign in with your Job Agent account.</p>
+  </aside>
+  <main class='auth-panel'>
+    <form id='form' class='auth-card' data-mode='login' novalidate>
+      <h1>Sign in</h1>
+      <p class='sub'>Use the email address and password for your account.</p>
+      <div id='msg' class='msg' role='alert' hidden></div>
+      <label for='email'>Email</label>
+      <input id='email' type='email' autocomplete='username' required autofocus>
+      <label for='password'>Password</label>
+      <div class='pw'>
+        <input id='password' type='password' autocomplete='current-password' required>
+        <button type='button' class='pw-toggle' aria-label='Show password' aria-pressed='false'>Show</button>
+      </div>
+      <button id='submit' class='btn' type='submit'>Sign in</button>
+      <p class='alt'>New to Job Agent? <a href='/signup'>Create an account</a></p>
+    </form>
+  </main>
+</div>
+<script src='/static/js/auth_pages.js'></script>
+</body>
+</html>

@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8'>
+<meta name='viewport' content='width=device-width, initial-scale=1'>
+<title>Manage users - Job Agent</title>
+<link rel='stylesheet' href='/static/css/auth.css'>
+</head>
+<body>
+<header class='topbar'>
+  <div class='brand'><div class='brand-icon'>AI</div><div><h2>Job Agent</h2><span>Manage users</span></div></div>
+  <a href='/'>Back to the app</a>
+</header>
+<main class='admin-main'>
+  <h1>Users</h1>
+  <p id='summary' class='sub'>Loading users...</p>
+  <div id='msg' class='msg' role='status' hidden></div>
+  <div class='table-wrap'>
+    <table>
+      <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Created</th><th>Status</th><th>Action</th></tr></thead>
+      <tbody id='rows'></tbody>
+    </table>
+  </div>
+</main>
+<script src='/static/js/admin_users.js'></script>
+</body>
+</html>

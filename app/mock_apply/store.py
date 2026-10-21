@@ -1,14 +1,13 @@
 from pathlib import Path
 from datetime import datetime,timezone
-import json
-BASE=Path(__file__).resolve().parents[2];DB=BASE/'data'/'mock_submissions.json';DB.parent.mkdir(exist_ok=True)
+from app.database.state import load_state, update_state
+
+BASE=Path(__file__).resolve().parents[2];DB=BASE/'data'/'mock_submissions.json'
 def save_submission(data):
-    rows=[]
-    if DB.exists():
-        try:rows=json.loads(DB.read_text(encoding='utf-8'))
-        except Exception:pass
-    item={**data,'submitted_at':datetime.now(timezone.utc).isoformat()};rows.append(item);DB.write_text(json.dumps(rows,indent=2),encoding='utf-8');return item
+    item={**data,'submitted_at':datetime.now(timezone.utc).isoformat()}
+    def update(rows):
+        rows.append(item)
+        return rows,item
+    return update_state('mock_submissions',DB,[],update)
 def submissions():
-    if not DB.exists():return []
-    try:return json.loads(DB.read_text(encoding='utf-8'))
-    except Exception:return []
+    return load_state('mock_submissions',DB,[])
