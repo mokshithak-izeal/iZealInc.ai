@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gmail job sync - Job Agent</title>
+<style>
+  :root { --ink:#111827; --muted:#6b7280; --line:#e5e7eb; --bg:#f7f8fb; --blue:#2563eb; --ok:#047857; --warn:#b45309; --bad:#b91c1c; }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; color:var(--ink); background:var(--bg); }
+  main { max-width: 1100px; margin: 0 auto; padding: 28px 20px 60px; }
+  h1 { font-size: 24px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 32px 0 10px; }
+  p { margin: 0 0 10px; max-width: 70ch; }
+  .muted { color: var(--muted); }
+  .bar { display:flex; flex-wrap:wrap; gap:10px; align-items:center; margin: 14px 0; }
+  button, .btn { font: inherit; font-weight:600; padding: 9px 16px; border-radius: 8px; border: 1px solid var(--blue); background: var(--blue); color:#fff; cursor:pointer; text-decoration:none; }
+  button.secondary { background:#fff; color:var(--blue); }
+  button:disabled { opacity:.55; cursor:not-allowed; }
+  :focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+  .status { padding: 12px 14px; border:1px solid var(--line); background:#fff; border-radius:8px; }
+  .msg { white-space: pre-wrap; margin-top: 10px; padding: 10px 12px; border-radius: 8px; background:#fff; border:1px solid var(--line); }
+  .msg.error { border-color: #fecaca; color: var(--bad); }
+  textarea, input[type=text] { width:100%; font: 13px/1.4 ui-monospace, Consolas, monospace; padding:10px; border:1px solid var(--line); border-radius:8px; }
+  .table-wrap { overflow-x:auto; background:#fff; border:1px solid var(--line); border-radius:8px; }
+  table { border-collapse: collapse; width:100%; min-width: 760px; }
+  th, td { text-align:left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 13px; color: var(--muted); font-weight: 600; background:#fafafa; }
+  tr:last-child td { border-bottom: 0; }
+  .score { font-weight:700; white-space:nowrap; }
+  .REVIEW { color: var(--ok); } .BELOW { color: var(--muted); }
+  .skills { font-size: 13px; }
+  .missing { color: var(--bad); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Gmail job sync</h1>
+  <p class="muted">Reads job alert emails from the connected mailbox and matches each job against every uploaded resume. Nothing is submitted automatically.</p>
+
+  <div class="status" id="status">Checking connection...</div>
+  <div class="bar">
+    <a class="btn" id="connect" href="/auth/google/connect" hidden>Connect Gmail</a>
+    <button id="sync" hidden>Sync now</button>
+    <button id="disconnect" class="secondary" hidden>Disconnect</button>
+    <a href="/">Back to Job Agent</a>
+  </div>
+  <div class="msg" id="syncOut" hidden></div>
+
+  <h2>Matches</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Job</th><th>Candidate</th><th>Score</th><th>Matching skills</th><th>Missing skills</th></tr></thead>
+      <tbody id="rows"><tr><td colspan="5" class="muted">Loading...</td></tr></tbody>
+    </table>
+  </div>
+
+  <h2>Test with a pasted email</h2>
+  <p class="muted">Works without a Gmail connection. Paste a recruiter requirement email or a LinkedIn job alert, and put its subject line in the first box. Each email is only processed once, so change the subject or text to run it again.</p>
+  <input type="text" id="subject" value="LinkedIn Job Alert" aria-label="Email subject">
+  <textarea id="body" rows="8" placeholder="Paste the email content here" aria-label="Email content"></textarea>
+  <div class="bar"><button id="test" class="secondary">Match this email</button></div>
+  <div class="msg" id="testOut" hidden></div>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+async function api(path, options) {
+  const res = await fetch(path, Object.assign({ credentials: 'same-origin' }, options || {}));
+  let data = {};
+  try { data = await res.json(); } catch (e) {}
+  if (!res.ok) throw new Error(data.detail || ('Request failed (' + res.status + ')'));
+  return data;
+}
+
+function show(el, text, isError) {
+  el.hidden = false;
+  el.textContent = text;
+  el.className = 'msg' + (isError ? ' error' : '');
+}
+
+function summarize(s) {
+  const lines = [
+    'Emails checked: ' + s.emails_checked + (s.emails_remaining ? ' (' + s.emails_remaining + ' more waiting, sync again)' : ''),
+    'Jobs found: ' + s.jobs_found + ', matched: ' + s.processed + ', already seen: ' + s.duplicates,
+    'Emails that were not job requirements: ' + s.no_jobs_found
+  ];
+  (s.results || []).forEach((r) => lines.push('- ' + r.title + ': best match ' + r.best_candidate + ' (' + r.best_score + ')' + (r.limited ? ' [title only, scores are rough]' : '')));
+  (s.errors || []).forEach((e) => lines.push('Problem: ' + e));
+  return lines.join('\n');
+}
+
+async function loadStatus() {
+  const s = await api('/api/gmail/status');
+  const box = $('status');
+  if (!s.configured) {
+    box.textContent = 'Google credentials are not set yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server settings.';
+  } else if (s.connected) {
+    box.textContent = 'Connected as ' + s.email + (s.last_sync_at ? '. Last sync: ' + new Date(s.last_sync_at).toLocaleString() : '. Not synced yet.');
+  } else {
+    box.textContent = 'Gmail is not connected.';
+  }
+  $('connect').hidden = !(s.is_admin && s.configured && !s.connected);
+  $('sync').hidden = !(s.is_admin && s.connected);
+  $('disconnect').hidden = !(s.is_admin && s.connected);
+  $('test').disabled = !s.is_admin;
+}
+
+function addCell(tr, text, cls) {
+  const td = document.createElement('td');
+  td.textContent = text;
+  if (cls) td.className = cls;
+  tr.appendChild(td);
+  return td;
+}
+
+async function loadMatches() {
+  const rows = await api('/api/gmail/matches');
+  const body = $('rows');
+  body.textContent = '';
+  if (!rows.length) {
+    const tr = document.createElement('tr');
+    const td = addCell(tr, 'No matches yet. Connect Gmail and sync, or test with a pasted email.', 'muted');
+    td.colSpan = 5;
+    body.appendChild(tr);
+    return;
+  }
+  rows.forEach((r) => {
+    const tr = document.createElement('tr');
+    const label = (r.title || 'Untitled job') + (r.company ? ' at ' + r.company : '') + (r.limited ? ' (title only, rough match)' : '');
+    const jobCell = addCell(tr, label);
+    if (/^https:\/\//.test(r.job_url || '')) {
+      jobCell.textContent = '';
+      const a = document.createElement('a');
+      a.href = r.job_url; a.target = '_blank'; a.rel = 'noopener noreferrer';
+      a.textContent = label;
+      jobCell.appendChild(a);
+    }
+    addCell(tr, r.candidate);
+    const score = r.score == null ? 'n/a' : Math.round(r.score) + '%' + (r.ai_checked ? '' : ' (skills only)');
+    addCell(tr, score + (r.status === 'REVIEW' ? ' - review' : ''), 'score ' + r.status);
+    addCell(tr, (r.matched_skills || []).join(', ') || 'None', 'skills');
+    addCell(tr, (r.missing_skills || []).join(', ') || 'None', 'skills missing');
+    body.appendChild(tr);
+  });
+}
+
+async function run(button, outEl, path, options) {
+  button.disabled = true;
+  show(outEl, 'Working. This can take a minute...');
+  try {
+    show(outEl, summarize(await api(path, options)));
+    await loadStatus();
+    await loadMatches();
+  } catch (e) {
+    show(outEl, e.message, true);
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$('sync').addEventListener('click', () => run($('sync'), $('syncOut'), '/api/gmail/sync', { method: 'POST' }));
+$('test').addEventListener('click', () => run($('test'), $('testOut'), '/api/gmail/process-text', {
+  method: 'POST', headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ subject: $('subject').value, body: $('body').value })
+}));
+$('disconnect').addEventListener('click', async () => {
+  if (!confirm('Disconnect Gmail? Existing matches are kept.')) return;
+  try { await api('/api/gmail/disconnect', { method: 'POST' }); await loadStatus(); }
+  catch (e) { show($('syncOut'), e.message, true); }
+});
+
+loadStatus().catch((e) => { $('status').textContent = e.message; });
+loadMatches().catch((e) => { $('rows').textContent = ''; });
+</script>
+</body>
+</html>

@@ -5,7 +5,6 @@ window.fetch = async (...args) => {
   return r;
 };
 
-let candidateProfile = null;
 let lastMatch = null;
 
 const navItems = document.querySelectorAll('.nav-item');
@@ -19,7 +18,10 @@ function showPage(name) {
   if (page) page.classList.add('active');
   if (nav) nav.classList.add('active');
   if (name === 'applications') loadApplications();
-  if (name === 'matches' && candidateProfile) loadJobQueue();
+  if (name === 'matches') {
+    loadPairOptions();
+    loadJobQueue();
+  }
 }
 navItems.forEach(i => i.addEventListener('click', () => showPage(i.dataset.section)));
 function openCandidatePage(){ showPage('candidate'); }
@@ -29,53 +31,211 @@ function arr(v){ return Array.isArray(v) ? v : []; }
 function obj(v){ return v && typeof v === 'object' && !Array.isArray(v) ? v : {}; }
 function text(v, fallback='Not specified'){ return v === undefined || v === null || v === '' ? fallback : String(v); }
 
-function renderSkills(skills){
-  const box=document.getElementById('skillList'); if(!box) return;
-  box.innerHTML='';
-  arr(skills).forEach(skill=>{
-    const data = typeof skill === 'string' ? {name:skill} : obj(skill);
-    const span=document.createElement('span');
-    span.textContent=text(data.name,'Unknown');
-    if(data.evidence) span.title=`Confidence: ${Math.round(Number(data.confidence||0)*100)}% | ${data.evidence}`;
-    span.style.cssText='background:#dbeafe;color:#1e40af;padding:7px 10px;border-radius:999px;font-size:13px;font-weight:600';
-    box.appendChild(span);
-  });
+function addCandidatePreview(data, source){
+  const panel=document.getElementById('candidateProfile');
+  const previews=document.getElementById('candidatePreviews');
+  if(!panel||!previews)return;
+  panel.classList.remove('hidden');
+  const card=document.createElement('article');
+  card.style.cssText='padding:14px 0;border-bottom:1px solid #e5e7eb';
+  const heading=document.createElement('h3');
+  heading.textContent=text(data.candidate_name,'Unknown candidate');
+  const summary=document.createElement('p');
+  summary.textContent=`${text(data.current_role,'Role not specified')} | ${text(data.experience,'Experience not specified')} | ${text(data.file_name,'Resume')}`;
+  const skills=document.createElement('p');
+  skills.textContent=`Skills: ${arr(data.skills).join(', ')||'None identified'}`;
+  card.append(heading,summary,skills);
+  if(data.duplicate){
+    const note=document.createElement('p');
+    note.className='status';
+    note.textContent='This resume already exists in candidates.';
+    card.append(note);
+  }else{
+    const button=document.createElement('button');
+    button.type='button';
+    button.className='primary-button';
+    button.textContent='Save Candidate';
+    const status=document.createElement('p');
+    status.className='status';
+    status.setAttribute('aria-live','polite');
+    button.addEventListener('click',()=>saveCandidate(button,status,data,source));
+    card.append(button,status);
+  }
+  previews.prepend(card);
+}
+
+async function saveCandidate(button,status,data,source){
+  button.disabled=true;
+  status.textContent='Saving candidate...';
+  const form=new FormData();
+  form.append('profile',JSON.stringify(data));
+  if(source.file)form.append('file',source.file);
+  else form.append('text',source.text);
+  try{
+    const response=await fetch('/api/resumes/save',{method:'POST',body:form});
+    const result=await response.json();
+    if(!response.ok)throw new Error(result.detail||'Could not save candidate.');
+    status.textContent=result.duplicate
+      ?'This candidate already exists; no duplicate was saved.'
+      :'Candidate saved successfully.';
+    button.textContent=result.duplicate?'Already Saved':'Saved';
+    button.disabled=true;
+    try{await refreshCandidateCount();}
+    catch(error){console.error('Candidate saved, but count could not be refreshed:',error);}
+    await loadPairOptions();
+  }catch(error){
+    status.textContent=`Save failed: ${error.message}`;
+    button.disabled=false;
+  }
+}
+
+async function refreshCandidateCount(){
+  const count=document.getElementById('candidateCount');
+  if(!count)return;
+  const response=await fetch('/api/resumes');
+  const data=await response.json();
+  if(!response.ok)throw new Error(data.detail||'Could not refresh candidate count.');
+  count.textContent=String(arr(data).length);
 }
 
 const analyzeButton=document.getElementById('analyzeButton');
 if(analyzeButton){
   analyzeButton.addEventListener('click',async()=>{
-    const input=document.getElementById('resumeInput'), pastedText=document.getElementById('resumeText')?.value.trim(), status=document.getElementById('resumeStatus');
-    const hasFile=Boolean(input?.files.length), hasText=Boolean(pastedText);
-    if(hasFile===hasText){ if(status)status.textContent=hasFile?'Choose a file or paste text, not both.':'Choose a PDF or DOCX file, or paste resume text.'; return; }
-    analyzeButton.disabled=true; analyzeButton.textContent='Analyzing with Gemini...';
+    const input=document.getElementById('resumeInput'), files=Array.from(input?.files||[]), pastedText=document.getElementById('resumeText')?.value.trim(), status=document.getElementById('resumeStatus');
+    if(files.length&&pastedText){ if(status)status.textContent='Choose files or paste text, not both.'; return; }
+    if(!files.length&&!pastedText){ if(status)status.textContent='Select one or more resumes, or paste resume text.'; return; }
+    analyzeButton.disabled=true;
+    let analyzed=0, duplicates=0, failures=[];
     try{
-      const fd=new FormData();
-      if(hasFile) fd.append('file',input.files[0]);
-      else fd.append('text',pastedText);
-      const r=await fetch(hasFile?'/api/resumes/analyze':'/api/resumes/analyze-text',{method:'POST',body:fd});
-      const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Resume analysis failed.');
-      candidateProfile=d;
-      document.getElementById('candidateName').value=text(d.candidate_name,'');
-      document.getElementById('candidateExperience').value=text(d.experience,'');
-      renderSkills(d.technical_skills);
-      document.getElementById('candidateProfile').classList.remove('hidden');
-      document.getElementById('candidateCount').textContent='1';
-      if(status) status.textContent=`AI analyzed ${text(d.file_name,'resume')}. Found ${arr(d.technical_skills).length} contextual technical skills.`;
-      setupJobMatcher();
-    }catch(e){ if(status)status.textContent=`Error: ${e.message}`; }
-    finally{ analyzeButton.disabled=false; analyzeButton.textContent='Analyze Resume'; }
+      const items=files.length?files:[null];
+      for(let index=0;index<items.length;index++){
+        const file=items[index], fd=new FormData();
+        if(file) fd.append('file',file); else fd.append('text',pastedText);
+        if(status)status.textContent=`Analyzing resume ${index+1} of ${items.length}${file?`: ${file.name}`:''}...`;
+        try{
+          const r=await fetch(file?'/api/resumes/analyze':'/api/resumes/analyze-text',{method:'POST',body:fd});
+          const d=await r.json(); if(!r.ok) throw new Error(d.detail||'Resume analysis failed.');
+          if(d.duplicate)duplicates++;else analyzed++;
+          addCandidatePreview(d,{file,text:pastedText});
+          if(status)status.textContent=d.duplicate
+            ?`Already exists: ${d.candidate_name||file?.name||'This candidate'}; skipped duplicate.`
+            :`Analyzed ${analyzed} of ${items.length} resume(s). Save it from the profile preview when ready.`;
+        }catch(error){ failures.push(`${file?.name||'Pasted resume'}: ${error.message}`); }
+      }
+      if(status)status.textContent=`Analyzed ${analyzed} new resume(s); found ${duplicates} existing candidate(s). Save each new profile from the candidate preview.${failures.length?` Failed: ${failures.join(' | ')}`:''}`;
+    }finally{ analyzeButton.disabled=false; }
   });
 }
 
+let pairCandidates=[];
+let pairDescriptions=[];
+
 function setupJobMatcher(){
-  const page=document.getElementById('matches'); if(!page)return;
-  page.innerHTML=`<div class="page-header"><div><h1>LinkedIn Job Matcher</h1><p>Paste a LinkedIn job URL and the complete job description.</p></div></div>
-  <div class="panel"><label>LinkedIn Job URL<input id="jobUrl" type="url" placeholder="https://www.linkedin.com/jobs/view/..."></label><br>
-  <label>Job Description<textarea id="jobDescription" rows="14" style="width:100%;margin-top:8px;padding:12px;border:1px solid #d1d5db;border-radius:8px"></textarea></label><br>
-  <button id="matchJobButton" class="primary-button">Analyze & Match Job</button><p id="jobStatus" class="status"></p></div>
-  <div id="parsedJob" class="panel hidden"></div><div id="matchResult" class="panel hidden"></div>`;
+  const target=document.getElementById('pairMatcher'); if(!target)return;
+  target.innerHTML=`<div class="panel"><h2>Select a candidate and a job description</h2><div class="form-grid"><label>Candidate<select id="candidateSelect"></select></label><label>Job description<select id="descriptionSelect"></select></label></div><div class="form-grid"><div id="candidateSummary" class="muted"></div><div id="descriptionSummary" class="muted"></div></div><label>Preferred location<input id="matchPreferredLocation" type="text" placeholder="Optional"></label><br><button id="matchJobButton" class="primary-button">Match selected pair</button><p id="jobStatus" class="status" aria-live="polite"></p></div><div id="pairResultSummary" class="panel hidden"></div><div id="parsedJob" class="panel hidden"></div><div id="matchResult" class="panel hidden"></div>`;
   document.getElementById('matchJobButton').addEventListener('click',matchJob);
+  document.getElementById('candidateSelect').addEventListener('change',renderPairSummaries);
+  document.getElementById('descriptionSelect').addEventListener('change',renderPairSummaries);
+}
+
+async function loadPairOptions(){
+  if(!document.getElementById('candidateSelect'))return;
+  const candidateSelect=document.getElementById('candidateSelect'), descriptionSelect=document.getElementById('descriptionSelect');
+  const oldCandidate=candidateSelect.value, oldDescription=descriptionSelect.value;
+  try{
+    const [candidateResponse,descriptionResponse]=await Promise.all([fetch('/api/resumes'),fetch('/api/jobs/descriptions')]);
+    const [candidates,descriptions]=await Promise.all([candidateResponse.json(),descriptionResponse.json()]);
+    if(!candidateResponse.ok)throw new Error(candidates.detail||'Could not load candidates.');
+    if(!descriptionResponse.ok)throw new Error(descriptions.detail||'Could not load job descriptions.');
+    pairCandidates=arr(candidates); pairDescriptions=arr(descriptions);
+    candidateSelect.replaceChildren(new Option('Select a candidate',''));
+    pairCandidates.forEach(candidate=>{
+      const years=candidate.experience==null?'Experience not specified':`${candidate.experience} years`;
+      const option=new Option(`${candidate.name} — ${candidate.file} — ${years}`,candidate.id);
+      candidateSelect.add(option);
+    });
+    descriptionSelect.replaceChildren(new Option('Select a job description',''));
+    pairDescriptions.forEach(description=>{
+      const exp=description.experience||'Experience not specified';
+      descriptionSelect.add(new Option(`${description.title} — ${exp}`,description.id));
+    });
+    if(pairCandidates.some(x=>x.id===oldCandidate))candidateSelect.value=oldCandidate;
+    if(pairDescriptions.some(x=>x.id===oldDescription))descriptionSelect.value=oldDescription;
+    const count=document.getElementById('candidateCount'); if(count)count.textContent=String(pairCandidates.length);
+    const jobsCount=document.getElementById('jobCount'); if(jobsCount)jobsCount.textContent=String(pairDescriptions.length);
+    renderPairSummaries();
+    renderSavedDescriptions();
+  }catch(error){
+    const status=document.getElementById('jobStatus');
+    if(status)status.textContent=`Could not load candidate/job choices: ${error.message}`;
+  }
+}
+
+function renderPairSummaries(){
+  const candidate=pairCandidates.find(x=>x.id===document.getElementById('candidateSelect')?.value);
+  const description=pairDescriptions.find(x=>x.id===document.getElementById('descriptionSelect')?.value);
+  const candidateBox=document.getElementById('candidateSummary');
+  const descriptionBox=document.getElementById('descriptionSummary');
+  if(candidateBox)candidateBox.textContent=candidate?`${candidate.name} | ${candidate.current_role||'Role not specified'} | ${candidate.experience==null?'Experience not specified':candidate.experience+' years'} | ${candidate.file}`:'Select a saved candidate to see their profile.';
+  if(descriptionBox)descriptionBox.textContent=description?`${description.title} | Experience: ${description.experience||'Not specified'} | ${description.file||'Manually entered'}\n\n${description.description}`:'Select a saved job description to review it.';
+}
+
+function renderSavedDescriptions(){
+  const list=document.getElementById('savedDescriptionList'); if(!list)return;
+  list.replaceChildren();
+  if(!pairDescriptions.length){list.textContent='No descriptions saved yet.';return;}
+  pairDescriptions.forEach(description=>{
+    const card=document.createElement('article');
+    card.style.cssText='padding:14px 0;border-bottom:1px solid #e5e7eb';
+    const title=document.createElement('strong');title.textContent=description.title;
+    const meta=document.createElement('p');meta.className='muted';meta.textContent=`Experience: ${description.experience||'Not specified'} | ${description.file||'Manually entered'}`;
+    const body=document.createElement('details');
+    const summary=document.createElement('summary');summary.textContent='View job description';
+    const content=document.createElement('p');content.style.whiteSpace='pre-wrap';content.textContent=description.description;
+    body.append(summary,content);card.append(title,meta,body);list.appendChild(card);
+  });
+}
+
+async function setupDescriptionControls(){
+  const uploadButton=document.getElementById('uploadDescriptionsButton');
+  const saveButton=document.getElementById('saveDescriptionButton');
+  const status=document.getElementById('descriptionStatus');
+  if(!uploadButton||!saveButton)return;
+  uploadButton.addEventListener('click',async()=>{
+    const files=Array.from(document.getElementById('jobDescriptionFiles').files||[]);
+    if(!files.length){status.textContent='Select one or more TXT, PDF, or DOCX files.';return;}
+    const form=new FormData();files.forEach(file=>form.append('files',file));
+    uploadButton.disabled=true;status.textContent=`Uploading ${files.length} job description(s)...`;
+    try{
+      const response=await fetch('/api/jobs/descriptions/upload',{method:'POST',body:form}),data=await response.json();
+      if(!response.ok)throw new Error(data.detail||'Description upload failed.');
+      const items=arr(data.items),succeeded=items.filter(item=>item.ok&&!item.duplicate).length;
+      const duplicates=items.filter(item=>item.ok&&item.duplicate).length;
+      const failures=items.filter(item=>!item.ok).map(item=>`${item.file}: ${item.error}`);
+      status.textContent=`Saved ${succeeded} new description(s); skipped ${duplicates} duplicate(s).${failures.length?' Failed: '+failures.join(' | '):''}`;
+      document.getElementById('jobDescriptionFiles').value='';
+      await loadPairOptions();
+    }catch(error){status.textContent=`Upload failed: ${error.message}`;}
+    finally{uploadButton.disabled=false;}
+  });
+  saveButton.addEventListener('click',async()=>{
+    saveButton.disabled=true;
+    try{
+      const response=await fetch('/api/jobs/descriptions',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+        title:document.getElementById('newJobTitle').value,
+        experience:document.getElementById('newJobExperience').value,
+        description:document.getElementById('newJobDescription').value
+      })});
+      const data=await response.json();if(!response.ok)throw new Error(data.detail||'Could not save description.');
+      status.textContent=data.duplicate?`That job description already exists as "${data.title}".`:`Saved "${data.title}".`;
+      if(data.duplicate){await loadPairOptions();return;}
+      document.getElementById('newJobTitle').value='';
+      document.getElementById('newJobExperience').value='';
+      document.getElementById('newJobDescription').value='';
+      await loadPairOptions();
+    }catch(error){status.textContent=`Save failed: ${error.message}`;}
+    finally{saveButton.disabled=false;}
+  });
 }
 
 function badge(s,color){ return `<span style="display:inline-block;background:${color};padding:5px 9px;border-radius:12px;margin:3px">${text(s,'Unknown')}</span>`; }
@@ -106,15 +266,25 @@ function skillTable(values){
 async function matchJob(){
   const status=document.getElementById('jobStatus');
   try{
-    if(!candidateProfile) throw new Error('Analyze a resume first.');
-    const description=(document.getElementById('jobDescription')?.value||'').trim();
-    if(!description) throw new Error('Paste the complete job description first.');
+    const candidateId=document.getElementById('candidateSelect')?.value;
+    const descriptionId=document.getElementById('descriptionSelect')?.value;
+    if(!candidateId)throw new Error('Select a candidate first.');
+    if(!descriptionId)throw new Error('Select a job description first.');
+    const candidate=pairCandidates.find(x=>x.id===candidateId);
+    const description=pairDescriptions.find(x=>x.id===descriptionId);
     if(status) status.textContent='Gemini is parsing the job and the matcher is scoring normalized skills...';
-    const payload={job_description:description,candidate_profile:candidateProfile,preferred_location:document.getElementById('preferredLocation')?.value||'',threshold:Number(document.getElementById('minimumMatch')?.value||80),job_url:document.getElementById('jobUrl')?.value||''};
-    const r=await fetch('/api/jobs/analyze-match',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const r=await fetch('/api/jobs/match-saved',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({
+      candidate_id:candidateId,job_description_id:descriptionId,
+      preferred_location:document.getElementById('matchPreferredLocation').value,
+      threshold:Number(document.getElementById('minimumMatch')?.value||80)
+    })});
     const d=await r.json(); if(!r.ok) throw new Error(d.detail||`Request failed (${r.status})`);
     console.log('Job match API response:',d);
-    lastMatch=d; renderJob(obj(d.job),obj(d.match)); loadJobQueue();
+    lastMatch=d;
+    const summary=document.getElementById('pairResultSummary');
+    summary.classList.remove('hidden');
+    summary.textContent=`Matching ${d.candidate.name} (${d.candidate.experience==null?'experience not specified':d.candidate.experience+' years'}) with ${d.selected_job_description.title} (required experience: ${d.selected_job_description.experience||'not specified'}).`;
+    renderJob(obj(d.job),obj(d.match)); loadJobQueue();
     if(status) status.textContent='Job analysis and matching completed.';
   }catch(e){ console.error('Job matching UI error:',e); if(status) status.textContent=`Error: ${e.message}`; }
 }
@@ -157,3 +327,7 @@ async function setJobStatus(id,status){
   try{const r=await fetch(`/api/jobs/queue/${id}/status`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({status})});const d=await r.json();if(!r.ok)throw new Error(d.detail||'Could not update status.');loadJobQueue();}catch(e){alert(e.message)}
 }
 window.setJobStatus=setJobStatus;
+
+setupJobMatcher();
+setupDescriptionControls();
+loadPairOptions();

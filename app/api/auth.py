@@ -1,14 +1,15 @@
 import os
 import re
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import select, update
 
-from app.auth import (admin_only, audit, current_user, hash_password,
-                      rate_limit, verify_password)
+from app.auth import (admin_only, audit, create_auth_session, current_user,
+                      hash_password, rate_limit, session_token_hash, verify_password)
 from app.database.db import session
-from app.database.tables import AuditLog, User
+from app.database.tables import AuditLog, User, UserSession
 
 router = APIRouter(tags=['auth'])
 EMAIL_RE = re.compile(r'^[^@\s]+@[^@\s]+\.[^@\s]+$')
@@ -72,12 +73,21 @@ def login(req: Login, request: Request):
         if not u.is_active:
             raise HTTPException(403, 'This account is disabled. Contact an administrator.')
         request.session.clear()
-        request.session['user_id'] = u.id
+        request.session['session_token'] = create_auth_session(s, u.id, request)
         return {'email': u.email, 'name': u.name, 'role': u.role}
 
 
 @router.post('/api/auth/logout')
 def logout(request: Request):
+    token = request.session.get('session_token')
+    if isinstance(token, str):
+        with session() as s:
+            auth_session = s.scalar(select(UserSession).where(
+                UserSession.token_hash == session_token_hash(token),
+                UserSession.revoked_at.is_(None),
+            ))
+            if auth_session:
+                auth_session.revoked_at = datetime.now(timezone.utc)
     request.session.clear()
     return {'ok': True}
 
@@ -85,6 +95,62 @@ def logout(request: Request):
 @router.get('/api/auth/me')
 def whoami(user: dict = Depends(current_user)):
     return user
+
+
+@router.get('/api/auth/sessions')
+def list_sessions(request: Request, user: dict = Depends(current_user)):
+    token = request.session.get('session_token')
+    if not isinstance(token, str):
+        raise HTTPException(401, 'Please sign in.')
+    token_hash = session_token_hash(token)
+    now = datetime.now(timezone.utc)
+    with session() as s:
+        rows = s.scalars(select(UserSession).where(
+            UserSession.user_id == user['id'],
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+        ).order_by(UserSession.last_seen_at.desc())).all()
+        return {'sessions': [{
+            'id': row.id,
+            'user_agent': row.user_agent,
+            'ip_address': row.ip_address,
+            'created_at': row.created_at.isoformat(),
+            'last_seen_at': row.last_seen_at.isoformat(),
+            'expires_at': row.expires_at.isoformat(),
+            'is_current': row.token_hash == token_hash,
+        } for row in rows]}
+
+
+@router.delete('/api/auth/sessions/{session_id}')
+def revoke_session(session_id: str, request: Request, user: dict = Depends(current_user)):
+    now = datetime.now(timezone.utc)
+    with session() as s:
+        auth_session = s.get(UserSession, session_id)
+        if not auth_session or auth_session.user_id != user['id'] or auth_session.revoked_at:
+            raise HTTPException(404, 'Session not found.')
+        auth_session.revoked_at = now
+        is_current = auth_session.token_hash == session_token_hash(
+            request.session.get('session_token', '')
+        )
+    if is_current:
+        request.session.clear()
+    return {'ok': True, 'current': is_current}
+
+
+@router.post('/api/auth/sessions/revoke-others')
+def revoke_other_sessions(request: Request, user: dict = Depends(current_user)):
+    token = request.session.get('session_token')
+    if not isinstance(token, str):
+        raise HTTPException(401, 'Please sign in.')
+    now = datetime.now(timezone.utc)
+    with session() as s:
+        result = s.execute(update(UserSession).where(
+            UserSession.user_id == user['id'],
+            UserSession.token_hash != session_token_hash(token),
+            UserSession.revoked_at.is_(None),
+            UserSession.expires_at > now,
+        ).values(revoked_at=now))
+        return {'ok': True, 'revoked': result.rowcount}
 
 
 @router.get('/api/users')

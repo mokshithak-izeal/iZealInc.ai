@@ -9,5 +9,9 @@ pymupdf
 python-docx
 python-dotenv
 google-genai<3.0.0
+google-api-python-client
+google-auth
+google-auth-oauthlib
+cryptography
 bcrypt
 itsdangerous
