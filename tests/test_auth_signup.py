@@ -37,7 +37,7 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
     monkeypatch.setattr(auth_api, 'session', session)
     monkeypatch.setattr(auth, 'session', session)
     monkeypatch.delenv('BOOTSTRAP_ADMIN_EMAIL', raising=False)
-    monkeypatch.delenv('ALLOWED_EMAIL_DOMAINS', raising=False)
+    monkeypatch.setenv('ALLOWED_EMAIL_DOMAINS', 'izealinc.com')
 
     app = FastAPI()
     app.add_middleware(SessionMiddleware, secret_key='test-secret')
@@ -46,7 +46,7 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
     with TestClient(app) as client:
         signup = client.post('/api/auth/signup', json={
             'name': 'Recruiter',
-            'email': 'RECRUITER@example.com',
+            'email': 'RECRUITER@abdsinc.com',
             'password': 'long-enough-password',
         })
 
@@ -56,17 +56,17 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
             'message': 'Account created. You can sign in now.',
         }
         with test_session() as db_session:
-            user = db_session.scalar(select(User).where(User.email == 'recruiter@example.com'))
+            user = db_session.scalar(select(User).where(User.email == 'recruiter@abdsinc.com'))
             assert user is not None
             assert user.role == 'recruiter'
             assert user.is_active is True
 
         login = client.post('/api/auth/login', json={
-            'email': 'recruiter@example.com',
+            'email': 'recruiter@abdsinc.com',
             'password': 'long-enough-password',
         })
         assert login.status_code == 200
-        assert login.json()['email'] == 'recruiter@example.com'
+        assert login.json()['email'] == 'recruiter@abdsinc.com'
 
         listed = client.get('/api/auth/sessions')
         assert listed.status_code == 200
@@ -76,12 +76,12 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
         with TestClient(app) as another_user:
             another_signup = another_user.post('/api/auth/signup', json={
                 'name': 'Another Recruiter',
-                'email': 'another@example.com',
+                'email': 'another@izealinc.com',
                 'password': 'another-long-password',
             })
             assert another_signup.status_code == 200
             assert another_user.post('/api/auth/login', json={
-                'email': 'another@example.com',
+                'email': 'another@izealinc.com',
                 'password': 'another-long-password',
             }).status_code == 200
             foreign_revoke = another_user.delete(
@@ -92,7 +92,7 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
 
         with TestClient(app) as second_client:
             second_login = second_client.post('/api/auth/login', json={
-                'email': 'recruiter@example.com',
+                'email': 'recruiter@abdsinc.com',
                 'password': 'long-enough-password',
             })
             assert second_login.status_code == 200
@@ -107,7 +107,7 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
 
         with TestClient(app) as third_client:
             assert third_client.post('/api/auth/login', json={
-                'email': 'recruiter@example.com',
+                'email': 'recruiter@abdsinc.com',
                 'password': 'long-enough-password',
             }).status_code == 200
             revoke_others = client.post('/api/auth/sessions/revoke-others')
@@ -123,7 +123,7 @@ def test_signup_creates_active_account_that_can_sign_in(monkeypatch):
 
         duplicate = client.post('/api/auth/signup', json={
             'name': 'Recruiter',
-            'email': 'recruiter@example.com',
+            'email': 'recruiter@abdsinc.com',
             'password': 'long-enough-password',
         })
         assert duplicate.status_code == 409

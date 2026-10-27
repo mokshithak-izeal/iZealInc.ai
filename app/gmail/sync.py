@@ -40,55 +40,82 @@ def _fernet() -> Fernet:
     return Fernet(key)
 
 
-def configured() -> bool:
-    return bool(os.getenv('GOOGLE_CLIENT_ID') and os.getenv('GOOGLE_CLIENT_SECRET'))
+# One entry per organization. Each needs its own Internal OAuth client and uses its own table row.
+ORGS = {
+    'izealinc': {'row': 1, 'label': 'izealinc.com',
+                 'id_env': ('GOOGLE_CLIENT_ID_IZEAL', 'GOOGLE_CLIENT_ID'),
+                 'secret_env': ('GOOGLE_CLIENT_SECRET_IZEAL', 'GOOGLE_CLIENT_SECRET')},
+    'abdsinc': {'row': 2, 'label': 'abdsinc.com',
+                'id_env': ('GOOGLE_CLIENT_ID_ABDS',), 'secret_env': ('GOOGLE_CLIENT_SECRET_ABDS',)},
+}
 
 
-def _client_config() -> dict:
-    if not configured():
-        raise RuntimeError('GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET are not set in the environment.')
-    return {'web': {'client_id': os.environ['GOOGLE_CLIENT_ID'],
-                    'client_secret': os.environ['GOOGLE_CLIENT_SECRET'],
+def _env(names) -> str:
+    return next((os.environ[n] for n in names if os.getenv(n)), '')
+
+
+def _org(org: str) -> dict:
+    if org not in ORGS:
+        raise RuntimeError('Unknown organization.')
+    return ORGS[org]
+
+
+def configured(org: str = 'izealinc') -> bool:
+    o = _org(org)
+    return bool(_env(o['id_env']) and _env(o['secret_env']))
+
+
+def _client_config(org: str) -> dict:
+    o = _org(org)
+    if not configured(org):
+        raise RuntimeError(f"{o['id_env'][0]} and {o['secret_env'][0]} are not set in the environment.")
+    return {'web': {'client_id': _env(o['id_env']),
+                    'client_secret': _env(o['secret_env']),
                     'auth_uri': 'https://accounts.google.com/o/oauth2/auth',
                     'token_uri': 'https://oauth2.googleapis.com/token'}}
 
 
-def make_flow(redirect_uri: str, state: str | None = None) -> Flow:
-    return Flow.from_client_config(_client_config(), scopes=SCOPES, redirect_uri=redirect_uri, state=state)
+def make_flow(org: str, redirect_uri: str, state: str | None = None) -> Flow:
+    return Flow.from_client_config(_client_config(org), scopes=SCOPES, redirect_uri=redirect_uri, state=state)
 
 
-def finish_connection(creds, user_id: str) -> str:
+def finish_connection(creds, user_id: str, org: str) -> str:
+    row_id = _org(org)['row']
     svc = build('gmail', 'v1', credentials=creds, cache_discovery=False)
     email = svc.users().getProfile(userId='me').execute().get('emailAddress', '')
     token = _fernet().encrypt(creds.refresh_token.encode()).decode()
     with session() as s:
-        row = s.get(GmailConnection, 1) or GmailConnection(id=1)
+        row = s.get(GmailConnection, row_id) or GmailConnection(id=row_id)
         row.email, row.refresh_token, row.connected_by = email, token, user_id
         row.connected_at = datetime.now(timezone.utc)
         s.add(row)
     return email
 
 
-def connection_info() -> dict:
+def accounts() -> list:
+    out = []
     with session() as s:
-        row = s.get(GmailConnection, 1)
-        if not row or not row.refresh_token:
-            return {'connected': False}
-        return {'connected': True, 'email': row.email,
-                'connected_at': row.connected_at.isoformat(),
-                'last_sync_at': row.last_sync_at.isoformat() if row.last_sync_at else None}
+        for key, o in ORGS.items():
+            row = s.get(GmailConnection, o['row'])
+            info = {'org': key, 'label': o['label'], 'configured': configured(key),
+                    'connected': bool(row and row.refresh_token)}
+            if info['connected']:
+                info['email'] = row.email
+                info['last_sync_at'] = row.last_sync_at.isoformat() if row.last_sync_at else None
+            out.append(info)
+    return out
 
 
-def disconnect():
+def disconnect(org: str):
     with session() as s:
-        row = s.get(GmailConnection, 1)
+        row = s.get(GmailConnection, _org(org)['row'])
         if row:
             s.delete(row)
 
 
-def _service():
+def _service(org: str):
     with session() as s:
-        row = s.get(GmailConnection, 1)
+        row = s.get(GmailConnection, _org(org)['row'])
         token = row.refresh_token if row else ''
     if not token:
         raise RuntimeError('Gmail is not connected yet. Connect it first.')
@@ -97,7 +124,7 @@ def _service():
     except InvalidToken as exc:
         raise RuntimeError('The stored Gmail connection cannot be read (SECRET_KEY may have changed). '
                            'Disconnect and connect again.') from exc
-    cfg = _client_config()['web']
+    cfg = _client_config(org)['web']
     creds = Credentials(None, refresh_token=refresh, token_uri=cfg['token_uri'],
                         client_id=cfg['client_id'], client_secret=cfg['client_secret'], scopes=SCOPES)
     return build('gmail', 'v1', credentials=creds, cache_discovery=False)
@@ -151,8 +178,7 @@ def _matched_and_missing(parsed: dict, match: dict):
 
 def _profile(c: Candidate) -> dict:
     """Rebuild the same profile shape the resume upload screen returns."""
-    p = {key: value for key, value in (c.profile or {}).items()
-         if not key.startswith('_')}
+    p = dict(c.profile or {})
     p.setdefault('candidate_name', c.name)
     p.setdefault('skills', [s.get('name', '') for s in p.get('technical_skills', []) if isinstance(s, dict)])
     years = p.get('total_experience_years')
@@ -244,30 +270,44 @@ def _process_email(subject, body, cands, location, threshold, summary, source_ke
 
 # ---------- entry points ----------
 
+def _sync_org(org, cands, location, threshold, summary):
+    svc = _service(org)
+    listing = svc.users().messages().list(userId='me', q=QUERY, maxResults=50).execute()
+    # Message IDs are only unique per mailbox, so the second organization is prefixed.
+    key = lambda mid: mid if org == 'izealinc' else f'{org}:{mid}'
+    ids = [m['id'] for m in listing.get('messages', [])]
+    with session() as s:
+        done = set(s.scalars(select(GmailMessage.message_id)
+                             .where(GmailMessage.message_id.in_([key(i) for i in ids]))).all()) if ids else set()
+    pending = [i for i in ids if key(i) not in done]
+    todo = pending[:MAX_EMAILS]
+    summary['emails_checked'] += len(todo)
+    summary['emails_remaining'] += len(pending) - len(todo)
+    for mid in todo:
+        msg = svc.users().messages().get(userId='me', id=mid, format='full').execute()
+        subject, body = _subject_and_body(msg)
+        if _process_email(subject, body, cands, location, threshold, summary, f'gmail:{key(mid)}'):
+            with session() as s:
+                s.merge(GmailMessage(message_id=key(mid)))
+    with session() as s:
+        row = s.get(GmailConnection, ORGS[org]['row'])
+        if row:
+            row.last_sync_at = datetime.now(timezone.utc)
+
+
 def run_sync() -> dict:
     cands, location, threshold = _context()
     if not cands:
         raise RuntimeError('Upload at least one resume before syncing.')
-    svc = _service()
-    listing = svc.users().messages().list(userId='me', q=QUERY, maxResults=50).execute()
-    ids = [m['id'] for m in listing.get('messages', [])]
-    with session() as s:
-        done = set(s.scalars(select(GmailMessage.message_id)
-                             .where(GmailMessage.message_id.in_(ids))).all()) if ids else set()
-    pending = [i for i in ids if i not in done]
-    todo = pending[:MAX_EMAILS]
+    connected = [a['org'] for a in accounts() if a['connected']]
+    if not connected:
+        raise RuntimeError('Connect a Gmail account first.')
     summary = _new_summary()
-    summary['emails_checked'], summary['emails_remaining'] = len(todo), len(pending) - len(todo)
-    for mid in todo:
-        msg = svc.users().messages().get(userId='me', id=mid, format='full').execute()
-        subject, body = _subject_and_body(msg)
-        if _process_email(subject, body, cands, location, threshold, summary, f'gmail:{mid}'):
-            with session() as s:
-                s.merge(GmailMessage(message_id=mid))
-    with session() as s:
-        row = s.get(GmailConnection, 1)
-        if row:
-            row.last_sync_at = datetime.now(timezone.utc)
+    for org in connected:
+        try:
+            _sync_org(org, cands, location, threshold, summary)
+        except Exception as exc:
+            summary['errors'].append(f"{ORGS[org]['label']}: {str(exc)[:200]}")
     return summary
 
 

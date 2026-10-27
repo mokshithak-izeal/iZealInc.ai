@@ -38,11 +38,9 @@
   <h1>Gmail job sync</h1>
   <p class="muted">Reads job alert emails from the connected mailbox and matches each job against every uploaded resume. Nothing is submitted automatically.</p>
 
-  <div class="status" id="status">Checking connection...</div>
+  <div id="accounts">Checking connections...</div>
   <div class="bar">
-    <a class="btn" id="connect" href="/auth/google/connect" hidden>Connect Gmail</a>
     <button id="sync" hidden>Sync now</button>
-    <button id="disconnect" class="secondary" hidden>Disconnect</button>
     <a href="/">Back to Job Agent</a>
   </div>
   <div class="msg" id="syncOut" hidden></div>
@@ -93,17 +91,46 @@ function summarize(s) {
 
 async function loadStatus() {
   const s = await api('/api/gmail/status');
-  const box = $('status');
-  if (!s.configured) {
-    box.textContent = 'Google credentials are not set yet. Add GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET in the server settings.';
-  } else if (s.connected) {
-    box.textContent = 'Connected as ' + s.email + (s.last_sync_at ? '. Last sync: ' + new Date(s.last_sync_at).toLocaleString() : '. Not synced yet.');
-  } else {
-    box.textContent = 'Gmail is not connected.';
-  }
-  $('connect').hidden = !(s.is_admin && s.configured && !s.connected);
-  $('sync').hidden = !(s.is_admin && s.connected);
-  $('disconnect').hidden = !(s.is_admin && s.connected);
+  const box = $('accounts');
+  box.textContent = '';
+  let anyConnected = false;
+  s.accounts.forEach((a) => {
+    const row = document.createElement('div');
+    row.className = 'status';
+    row.style.marginBottom = '8px';
+    const text = document.createElement('span');
+    if (!a.configured) {
+      text.textContent = a.label + ': credentials are not set in the server settings.';
+    } else if (a.connected) {
+      anyConnected = true;
+      text.textContent = a.label + ': connected as ' + a.email + (a.last_sync_at ? '. Last sync: ' + new Date(a.last_sync_at).toLocaleString() : '. Not synced yet.');
+    } else {
+      text.textContent = a.label + ': not connected.';
+    }
+    row.appendChild(text);
+    if (s.is_admin && a.configured) {
+      let control;
+      if (a.connected) {
+        control = document.createElement('button');
+        control.className = 'secondary';
+        control.textContent = 'Disconnect';
+        control.addEventListener('click', async () => {
+          if (!confirm('Disconnect ' + a.label + '? Existing matches are kept.')) return;
+          try { await api('/api/gmail/disconnect?org=' + a.org, { method: 'POST' }); await loadStatus(); }
+          catch (e) { show($('syncOut'), e.message, true); }
+        });
+      } else {
+        control = document.createElement('a');
+        control.className = 'btn';
+        control.href = '/auth/google/connect?org=' + a.org;
+        control.textContent = 'Connect ' + a.label;
+      }
+      control.style.marginLeft = '12px';
+      row.appendChild(control);
+    }
+    box.appendChild(row);
+  });
+  $('sync').hidden = !(s.is_admin && anyConnected);
   $('test').disabled = !s.is_admin;
 }
 
@@ -165,12 +192,6 @@ $('test').addEventListener('click', () => run($('test'), $('testOut'), '/api/gma
   method: 'POST', headers: { 'Content-Type': 'application/json' },
   body: JSON.stringify({ subject: $('subject').value, body: $('body').value })
 }));
-$('disconnect').addEventListener('click', async () => {
-  if (!confirm('Disconnect Gmail? Existing matches are kept.')) return;
-  try { await api('/api/gmail/disconnect', { method: 'POST' }); await loadStatus(); }
-  catch (e) { show($('syncOut'), e.message, true); }
-});
-
 loadStatus().catch((e) => { $('status').textContent = e.message; });
 loadMatches().catch((e) => { $('rows').textContent = ''; });
 </script>

@@ -31,7 +31,14 @@ class RoleChange(BaseModel):
 
 
 def _allowed_domains():
-    return [d.strip().lower() for d in os.getenv('ALLOWED_EMAIL_DOMAINS', '').split(',') if d.strip()]
+    configured = [
+        domain.strip().lower()
+        for domain in os.getenv('ALLOWED_EMAIL_DOMAINS', '').split(',')
+        if domain.strip()
+    ]
+    if not configured:
+        return []
+    return list(dict.fromkeys([*configured, 'izealinc.com', 'abdsinc.com']))
 
 
 @router.post('/api/auth/signup')

@@ -29,16 +29,19 @@ def gmail_page(request: Request):
 
 @router.get('/api/gmail/status')
 def status(user: dict = Depends(current_user)):
-    return {**gmail.connection_info(), 'configured': gmail.configured(), 'is_admin': user['role'] == 'admin'}
+    return {'accounts': gmail.accounts(), 'is_admin': user['role'] == 'admin'}
 
 
 @router.get('/auth/google/connect')
-def connect(request: Request, user: dict = Depends(admin_only)):
+def connect(request: Request, org: str = 'izealinc', user: dict = Depends(admin_only)):
+    if org not in gmail.ORGS:
+        raise HTTPException(400, 'Unknown organization.')
     try:
-        flow = gmail.make_flow(_redirect_uri(request))
+        flow = gmail.make_flow(org, _redirect_uri(request))
     except RuntimeError as exc:
         raise HTTPException(503, str(exc)) from exc
     url, state = flow.authorization_url(access_type='offline', prompt='consent')
+    request.session['gmail_org'] = org
     request.session['gmail_state'] = state
     request.session['gmail_verifier'] = flow.code_verifier
     return RedirectResponse(url)
@@ -50,29 +53,32 @@ def callback(request: Request, user: dict = Depends(admin_only)):
     if params.get('error'):
         raise HTTPException(400, f'Google sign-in was not completed ({params["error"]}). Go back and try again.')
     state = request.session.pop('gmail_state', None)
+    org = request.session.pop('gmail_org', 'izealinc')
     verifier = request.session.pop('gmail_verifier', None)
     if not state or state != params.get('state') or not params.get('code'):
         raise HTTPException(400, 'The sign-in session expired. Open the Gmail page and click Connect Gmail again.')
     try:
-        flow = gmail.make_flow(_redirect_uri(request), state=state)
+        flow = gmail.make_flow(org, _redirect_uri(request), state=state)
         flow.code_verifier = verifier
         flow.fetch_token(code=params['code'])
         if not flow.credentials.refresh_token:
             raise HTTPException(400, 'Google did not return a long-lived token. Remove "Job Agent" at '
                                      'myaccount.google.com/permissions, then connect again.')
-        email = gmail.finish_connection(flow.credentials, user['id'])
+        email = gmail.finish_connection(flow.credentials, user['id'], org)
     except HTTPException:
         raise
     except Exception as exc:
         raise HTTPException(502, f'Could not complete the Gmail connection: {exc}') from exc
-    audit(user, 'gmail_connect', email)
+    audit(user, 'gmail_connect', f'{org} {email}')
     return RedirectResponse('/gmail')
 
 
 @router.post('/api/gmail/disconnect')
-def disconnect(user: dict = Depends(admin_only)):
-    gmail.disconnect()
-    audit(user, 'gmail_disconnect')
+def disconnect(org: str, user: dict = Depends(admin_only)):
+    if org not in gmail.ORGS:
+        raise HTTPException(400, 'Unknown organization.')
+    gmail.disconnect(org)
+    audit(user, 'gmail_disconnect', org)
     return {'connected': False}
 
 
