@@ -37,7 +37,7 @@ function addCandidatePreview(data, source){
   if(!panel||!previews)return;
   panel.classList.remove('hidden');
   const card=document.createElement('article');
-  card.style.cssText='padding:14px 0;border-bottom:1px solid #e5e7eb';
+  card.className='candidate-card';
   const heading=document.createElement('h3');
   heading.textContent=text(data.candidate_name,'Unknown candidate');
   const summary=document.createElement('p');
@@ -132,7 +132,7 @@ let pairDescriptions=[];
 
 function setupJobMatcher(){
   const target=document.getElementById('pairMatcher'); if(!target)return;
-  target.innerHTML=`<div class="panel"><h2>Select a candidate and a job description</h2><div class="form-grid"><label>Candidate<select id="candidateSelect"></select></label><label>Job description<select id="descriptionSelect"></select></label></div><div class="form-grid"><div id="candidateSummary" class="muted"></div><div id="descriptionSummary" class="muted"></div></div><label>Preferred location<input id="matchPreferredLocation" type="text" placeholder="Optional"></label><br><button id="matchJobButton" class="primary-button">Match selected pair</button><p id="jobStatus" class="status" aria-live="polite"></p></div><div id="pairResultSummary" class="panel hidden"></div><div id="parsedJob" class="panel hidden"></div><div id="matchResult" class="panel hidden"></div>`;
+  target.innerHTML=`<div class="panel"><h2>Select a candidate and a job description</h2><div class="form-grid"><label>Candidate<select id="candidateSelect"></select></label><label>Job description<select id="descriptionSelect"></select></label></div><div class="form-grid"><div id="candidateSummary" class="muted summary-box"></div><div id="descriptionSummary" class="muted summary-box description-preview"></div></div><label>Preferred location<input id="matchPreferredLocation" type="text" placeholder="Optional"></label><div class="form-actions"><button id="matchJobButton" class="primary-button">Match selected pair</button></div><p id="jobStatus" class="status" aria-live="polite"></p></div><div id="pairResultSummary" class="panel hidden"></div><div id="parsedJob" class="panel hidden"></div><div id="matchResult" class="panel hidden"></div>`;
   document.getElementById('matchJobButton').addEventListener('click',matchJob);
   document.getElementById('candidateSelect').addEventListener('change',renderPairSummaries);
   document.getElementById('descriptionSelect').addEventListener('change',renderPairSummaries);
@@ -186,7 +186,7 @@ function renderSavedDescriptions(){
   if(!pairDescriptions.length){list.textContent='No descriptions saved yet.';return;}
   pairDescriptions.forEach(description=>{
     const card=document.createElement('article');
-    card.style.cssText='padding:14px 0;border-bottom:1px solid #e5e7eb';
+    card.className='description-card';
     const title=document.createElement('strong');title.textContent=description.title;
     const meta=document.createElement('p');meta.className='muted';meta.textContent=`Experience: ${description.experience||'Not specified'} | ${description.file||'Manually entered'}`;
     const body=document.createElement('details');
@@ -238,10 +238,12 @@ async function setupDescriptionControls(){
   });
 }
 
-function badge(s,color){ return `<span style="display:inline-block;background:${color};padding:5px 9px;border-radius:12px;margin:3px">${text(s,'Unknown')}</span>`; }
-function badges(values,color='#eef2ff'){
+function badge(s, colorClass){
+  return `<span class="badge badge-${colorClass}">${text(s,'Unknown')}</span>`;
+}
+function badges(values, colorClass='blue'){
   const a=arr(values); if(!a.length)return '<span class="muted">None</span>';
-  let html=''; for(const value of a) html += badge(value,color); return html;
+  let html=''; for(const value of a) html += badge(value,colorClass); return html;
 }
 function bullets(values){
   const a=arr(values); if(!a.length)return '<span class="muted">None</span>';
@@ -253,14 +255,13 @@ function breakdown(value){
 }
 function skillTable(values){
   const a=arr(values); if(!a.length)return '<span class="muted">None</span>';
-  let html='';
+  let html='<div class="skill-list">';
   for(const raw of a){
     const x=obj(raw), state=text(x.status,'missing');
-    const color=state==='exact'?'#dcfce7':state==='related'?'#fef3c7':'#fee2e2';
     const label=state==='exact'?'MATCH':state==='related'?`RELATED (${text(x.matched_with,'related skill')})`:'MISSING';
-    html += `<div style="padding:7px 9px;margin:5px 0;background:${color};border-radius:7px"><strong>${text(x.job_skill,'Unknown skill')}</strong> - ${label}</div>`;
+    html += `<div class="skill-item skill-${state}"><strong>${text(x.job_skill,'Unknown skill')}</strong> — ${label}</div>`;
   }
-  return html;
+  return html + '</div>';
 }
 
 async function matchJob(){
@@ -292,10 +293,10 @@ async function matchJob(){
 function renderJob(j,m){
   const parsed=document.getElementById('parsedJob'), result=document.getElementById('matchResult'); if(!parsed||!result)return;
   parsed.classList.remove('hidden');
-  parsed.innerHTML=`<h2>Parsed LinkedIn Job</h2><p><strong>Title:</strong> ${text(j.title)}</p><p><strong>Company:</strong> ${text(j.company)}</p><p><strong>Location:</strong> ${text(j.location)} ${j.work_mode?' | '+j.work_mode:''}</p><p><strong>Experience:</strong> ${text(j.minimum_experience_years)}${j.maximum_experience_years!==undefined&&j.maximum_experience_years!==null?' - '+j.maximum_experience_years:''} years</p><p><strong>Required skills:</strong><br>${badges(j.required_skills,'#dcfce7')}</p><p><strong>Preferred skills:</strong><br>${badges(j.preferred_skills,'#fef3c7')}</p><p><strong>Responsibilities:</strong>${bullets(j.responsibilities)}</p>`;
+  parsed.innerHTML=`<h2>Parsed LinkedIn Job</h2><p><strong>Title:</strong> ${text(j.title)}</p><p><strong>Company:</strong> ${text(j.company)}</p><p><strong>Location:</strong> ${text(j.location)} ${j.work_mode?' | '+j.work_mode:''}</p><p><strong>Experience:</strong> ${text(j.minimum_experience_years)}${j.maximum_experience_years!==undefined&&j.maximum_experience_years!==null?' - '+j.maximum_experience_years:''} years</p><p><strong>Required skills:</strong></p><div class="badge-list">${badges(j.required_skills,'green')}</div><p><strong>Preferred skills:</strong></p><div class="badge-list">${badges(j.preferred_skills,'amber')}</div><p><strong>Responsibilities:</strong>${bullets(j.responsibilities)}</p>`;
   result.classList.remove('hidden');
   if(m.score===undefined || m.score===null){ result.innerHTML=`<h2>Match not calculated</h2><p><strong>Decision:</strong> ${text(m.decision,'INSUFFICIENT_JOB_DATA')}</p><p>${text(m.reason,'Not enough comparable data.')}</p>`; return; }
-  result.innerHTML=`<h2>Match Analysis</h2><h1>${m.score}%</h1><p><strong>Decision:</strong> ${text(m.decision)}</p><h3>Required skills</h3>${skillTable(m.required_skill_matches)}<h3>Preferred skills</h3>${skillTable(m.preferred_skill_matches)}<p><strong>Experience:</strong> ${m.experience_pass===null||m.experience_pass===undefined?'Not specified':m.experience_pass?'PASS':'FAIL'}</p><p><strong>Score breakdown:</strong> ${breakdown(m.score_breakdown)}</p><p><strong>Effective weights:</strong> ${breakdown(m.weights_used)}</p><p><small>Green = canonical/exact. Yellow = related evidence with partial credit. Red = missing.</small></p>${j.job_url?`<button id="openLinkedInButton" class="secondary-button">Open on LinkedIn</button> `:''}<button id="markAppliedButton" class="primary-button">Mark as Applied</button>`;
+  result.innerHTML=`<h2>Match Analysis</h2><div class="score-display">${m.score}%</div><p><strong>Decision:</strong> ${text(m.decision)}</p><h3>Required skills</h3>${skillTable(m.required_skill_matches)}<h3>Preferred skills</h3>${skillTable(m.preferred_skill_matches)}<p><strong>Experience:</strong> ${m.experience_pass===null||m.experience_pass===undefined?'Not specified':m.experience_pass?'PASS':'FAIL'}</p><p><strong>Score breakdown:</strong> ${breakdown(m.score_breakdown)}</p><p><strong>Effective weights:</strong> ${breakdown(m.weights_used)}</p><p><small>Green = canonical/exact. Yellow = related evidence with partial credit. Red = missing.</small></p><div class="form-actions">${j.job_url?`<button id="openLinkedInButton" class="secondary-button">Open on LinkedIn</button>`:''}<button id="markAppliedButton" class="primary-button">Mark as Applied</button></div>`;
   const open=document.getElementById('openLinkedInButton'); if(open)open.onclick=()=>window.open(j.job_url,'_blank','noopener');
   const applied=document.getElementById('markAppliedButton'); if(applied)applied.onclick=markApplied;
 }
@@ -306,7 +307,7 @@ async function markApplied(){
 }
 async function loadApplications(){
   const page=document.getElementById('applications'); if(!page)return;
-  try{const r=await fetch('/api/jobs/applications'),data=await r.json(),rows=arr(data);document.getElementById('applicationCount').textContent=String(rows.length);let html='<div class="page-header"><div><h1>Applications</h1><p>Jobs you manually marked as applied.</p></div></div><div class="panel">';if(!rows.length)html+='<div class="empty-state"><h3>No applications yet</h3></div>';for(const raw of rows){const x=obj(raw);html+=`<div style="padding:14px 0;border-bottom:1px solid #e5e7eb"><strong>${text(x.title,'Job')}</strong>${x.company?' - '+x.company:''}<br>Match: ${x.score==null?'Not calculated':x.score+'%'} | Status: ${text(x.status,'APPLIED')}<br><small>${text(x.applied_at,'')}</small></div>`;}page.innerHTML=html+'</div>';}catch(e){console.error(e)}
+  try{const r=await fetch('/api/jobs/applications'),data=await r.json(),rows=arr(data);document.getElementById('applicationCount').textContent=String(rows.length);let html='<div class="page-header"><div><h1>Applications</h1><p>Jobs you manually marked as applied.</p></div></div><div class="panel">';if(!rows.length)html+='<div class="empty-state"><h3>No applications yet</h3></div>';for(const raw of rows){const x=obj(raw);html+=`<div class="application-card"><div class="application-title">${text(x.title,'Job')}${x.company?' — '+x.company:''}</div><div class="application-meta">Match: <span class="application-score">${x.score==null?'Not calculated':x.score+'%'}</span> | Status: ${text(x.status,'APPLIED')}</div><div class="application-meta">${text(x.applied_at,'')}</div></div>`;}page.innerHTML=html+'</div>';}catch(e){console.error(e)}
 }
 
 async function loadJobQueue(){
@@ -315,10 +316,11 @@ async function loadJobQueue(){
   if(!queue){queue=document.createElement('div');queue.id='jobQueue';queue.className='panel';page.appendChild(queue);}
   try{
     const r=await fetch('/api/jobs/queue'), data=await r.json(), jobs=arr(data);
-    let html='<h2>Saved Job Review Queue</h2><p>Every analyzed job is saved here. Use the status buttons to triage the queue.</p>';
+    let html='<h2>Saved Job Review Queue</h2><p class="muted">Every analyzed job is saved here. Use the status buttons to triage the queue.</p>';
     if(!jobs.length){queue.innerHTML=html+'<p class="muted">No analyzed jobs saved yet.</p>';return;}
     for(const raw of jobs){const j=obj(raw); const score=j.score==null?'Not calculated':j.score+'%';
-      html+=`<div style="border-top:1px solid #e5e7eb;padding:16px 0"><h3 style="margin:0">${text(j.title,'Job')}</h3><p>${text(j.company,'Company not specified')} | ${text(j.location,'Location not specified')}</p><p><strong>${score}</strong> | ${text(j.decision,'')} | Status: <strong>${text(j.status,'NEW')}</strong></p><p>Missing required: ${arr(j.required_skill_matches).filter(x=>obj(x).status==='missing').map(x=>text(obj(x).job_skill,'')).filter(Boolean).slice(0,8).join(', ')||'None'}</p>${j.job_url?`<button class="secondary-button" onclick="window.open('${String(j.job_url).replace(/'/g,'')}','_blank','noopener')">Open LinkedIn</button> `:''}<button class="secondary-button" onclick="setJobStatus('${j.id}','REVIEW')">Review</button> <button class="secondary-button" onclick="setJobStatus('${j.id}','SKIPPED')">Skip</button> <button class="primary-button" onclick="setJobStatus('${j.id}','APPLIED')">Applied</button></div>`;
+      const missing=arr(j.required_skill_matches).filter(x=>obj(x).status==='missing').map(x=>text(obj(x).job_skill,'')).filter(Boolean).slice(0,8).join(', ')||'None';
+      html+=`<div class="queue-card"><div class="queue-header"><div><h3>${text(j.title,'Job')}</h3><div class="queue-meta">${text(j.company,'Company not specified')} | ${text(j.location,'Location not specified')}</div><div class="queue-meta"><span class="queue-score">${score}</span> | ${text(j.decision,'')} | Status: <strong>${text(j.status,'NEW')}</strong></div><div class="queue-meta">Missing required: ${missing}</div></div></div><div class="queue-actions">${j.job_url?`<button class="secondary-button" onclick="window.open('${String(j.job_url).replace(/'/g,'')}','_blank','noopener')">Open LinkedIn</button>`:''}<button class="secondary-button" onclick="setJobStatus('${j.id}','REVIEW')">Review</button><button class="secondary-button" onclick="setJobStatus('${j.id}','SKIPPED')">Skip</button><button class="primary-button" onclick="setJobStatus('${j.id}','APPLIED')">Applied</button></div></div>`;
     }
     queue.innerHTML=html;
   }catch(e){queue.innerHTML=`<h2>Saved Job Review Queue</h2><p>Error loading queue: ${e.message}</p>`;}

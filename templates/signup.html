@@ -1,43 +1,52 @@
 <!DOCTYPE html>
-<html lang='en'>
+<html lang="en">
 <head>
-<meta charset='utf-8'>
-<meta name='viewport' content='width=device-width, initial-scale=1'>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Request an account for Job Agent</title>
-<link rel='stylesheet' href='/static/css/auth.css'>
+<link rel="stylesheet" href="/static/css/auth.css?v=2">
 </head>
 <body>
-<div class='auth-shell'>
-  <aside class='auth-brand'>
-    <div class='brand'><div class='brand-icon'>AI</div><div><h2>Job Agent</h2><span>AI Job Assistant</span></div></div>
-    <div class='auth-pitch'>
+<div class="auth-shell">
+  <aside class="auth-brand">
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div><h2>Job Agent</h2><span>AI Job Assistant</span></div>
+    </div>
+    <div class="auth-pitch">
       <h2>Match resumes to jobs, skill by skill.</h2>
       <p>Create an account to start matching resumes to jobs.</p>
     </div>
-    <p class='auth-note'>Create an account and sign in right away.</p>
+    <p class="auth-note">Create an account and sign in right away.</p>
   </aside>
-  <main class='auth-panel'>
-    <form id='form' class='auth-card' data-mode='signup' novalidate>
+  <main class="auth-panel">
+    <form id="form" class="auth-card" data-mode="signup" novalidate>
       <h1>Create an account</h1>
-      <p class='sub'>Use your work email. You can sign in as soon as your account is created.</p>
-      <div id='msg' class='msg' role='alert' hidden></div>
-      <label for='name'>Full name</label>
-      <input id='name' type='text' autocomplete='name' required autofocus>
-      <label for='email'>Work email</label>
-      <input id='email' type='email' autocomplete='email' required>
-      <label for='password'>Password</label>
-      <div class='pw'>
-        <input id='password' type='password' autocomplete='new-password' required aria-describedby='pwhint'>
-        <button type='button' class='pw-toggle' aria-label='Show password' aria-pressed='false'>Show</button>
+      <p class="sub">Use your work email. You can sign in as soon as your account is created.</p>
+      <div id="msg" class="msg" role="alert" hidden></div>
+
+      <label for="name">Full name</label>
+      <input id="name" type="text" autocomplete="name" required autofocus placeholder="Jane Doe">
+
+      <label for="email">Work email</label>
+      <input id="email" type="email" autocomplete="email" required placeholder="you@company.com">
+
+      <label for="password">Password</label>
+      <div class="pw">
+        <input id="password" type="password" autocomplete="new-password" required aria-describedby="pwhint" placeholder="At least 10 characters">
+        <button type="button" class="pw-toggle" aria-label="Show password" aria-pressed="false">Show</button>
       </div>
-      <p id='pwhint' class='hint'>At least 10 characters.</p>
-      <label for='confirm'>Confirm password</label>
-      <input id='confirm' type='password' autocomplete='new-password' required>
-      <button id='submit' class='btn' type='submit'>Create account</button>
-      <p class='alt'>Already have an account? <a href='/login'>Sign in</a></p>
+      <p id="pwhint" class="hint">At least 10 characters.</p>
+
+      <label for="confirm">Confirm password</label>
+      <input id="confirm" type="password" autocomplete="new-password" required placeholder="Re-enter your password">
+
+      <button id="submit" class="btn" type="submit">Create account</button>
+
+      <p class="alt">Already have an account? <a href="/login">Sign in</a></p>
     </form>
   </main>
 </div>
-<script src='/static/js/auth_pages.js'></script>
+<script src="/static/js/auth_pages.js"></script>
 </body>
 </html>

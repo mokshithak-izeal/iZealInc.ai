@@ -9,33 +9,142 @@
 <body>
 <div class="layout">
   <aside class="sidebar">
-    <div class="brand"><div class="brand-icon">AI</div><div><h2>Job Agent</h2><span>AI Job Assistant</span></div></div>
+    <div class="brand">
+      <div class="brand-icon">AI</div>
+      <div><h2>Job Agent</h2><span>AI Job Assistant</span></div>
+    </div>
     <nav>
-      <button class="nav-item active" data-section="dashboard">Dashboard</button>
-      <button class="nav-item" data-section="candidate">Candidate</button>
-      <button class="nav-item" data-section="matches">Job Matches</button>
-      <button class="nav-item" data-section="applications">Applications</button>
+      <button class="nav-item active" data-section="dashboard">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-section="candidate">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        Candidate
+      </button>
+      <button class="nav-item" data-section="matches">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+        Job Matches
+      </button>
+      <button class="nav-item" data-section="applications">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+        Applications
+      </button>
     </nav>
+    <div class="sidebar-foot">
+      <span class="dot"></span> AI Assistant ready
+    </div>
   </aside>
   <main class="content">
-    <div class="page-header" style="justify-content:flex-end;margin-bottom:0"><a class="secondary-button" href="/account/sessions" style="display:inline-block;text-decoration:none">Manage sessions</a><button type="button" class="secondary-button" onclick="fetch('/api/auth/logout', {method: 'POST'}).then(() => location = '/login')">Sign out</button></div>
+    <div class="topbar">
+      <a class="secondary-button" href="/account/sessions" style="text-decoration:none">Manage sessions</a>
+      <button type="button" class="secondary-button" onclick="fetch('/api/auth/logout', {method: 'POST'}).then(() => location = '/login')">Sign out</button>
+    </div>
+
+    <!-- Dashboard -->
     <section id="dashboard" class="page active">
-      <div class="page-header"><div><h1>Dashboard</h1><p>AI-powered resume and job matching</p></div><div style="display:flex;gap:10px;flex-wrap:wrap"><a class="secondary-button" href="/gmail" style="display:inline-block;text-decoration:none">Gmail job sync</a><button class="primary-button" onclick="openCandidatePage()">Analyze Resume</button></div></div>
-      <div class="stats">
-        <div class="stat-card"><span>Candidates</span><strong id="candidateCount">0</strong></div>
-        <div class="stat-card"><span>Jobs Found</span><strong id="jobCount">0</strong></div>
-        <div class="stat-card"><span>Matches &gt;= 80%</span><strong id="matchCount">0</strong></div>
-        <div class="stat-card"><span>Applications</span><strong id="applicationCount">0</strong></div>
+      <div class="page-header">
+        <div><h1>Dashboard</h1><p>AI-powered resume and job matching</p></div>
+        <div class="header-actions">
+          <a class="secondary-button" href="/gmail" style="text-decoration:none">Gmail job sync</a>
+          <button class="primary-button" onclick="openCandidatePage()">Analyze Resume</button>
+        </div>
       </div>
-      <div class="panel empty-state"><h3>No job matches yet</h3><p>Analyze a candidate resume and then load jobs to start matching.</p><button class="secondary-button" onclick="openCandidatePage()">Add Candidate</button></div>
+      <div class="stats">
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--brand">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="stat-body"><span>Candidates</span><strong id="candidateCount">0</strong></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--blue">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+          </div>
+          <div class="stat-body"><span>Jobs Found</span><strong id="jobCount">0</strong></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--green">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          </div>
+          <div class="stat-body"><span>Matches ≥ 80%</span><strong id="matchCount">0</strong></div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon stat-icon--amber">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+          </div>
+          <div class="stat-body"><span>Applications</span><strong id="applicationCount">0</strong></div>
+        </div>
+      </div>
+      <div class="panel empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        </div>
+        <h3>No job matches yet</h3>
+        <p>Analyze a candidate resume and then load jobs to start matching.</p>
+        <button class="secondary-button" onclick="openCandidatePage()">Add Candidate</button>
+      </div>
     </section>
+
+    <!-- Candidate -->
     <section id="candidate" class="page">
       <div class="page-header"><div><h1>Candidate Profile</h1><p>Upload a resume or paste its text to analyze it.</p></div></div>
-      <div class="panel"><h2>Upload resumes</h2><div class="upload-box"><input type="file" id="resumeInput" accept=".pdf,.docx" multiple><p>Select one or more PDF or DOCX resumes. Analyze first, then save each candidate from the profile preview.</p></div><label for="resumeText">Or paste one resume</label><textarea id="resumeText" rows="8" placeholder="Paste resume text here..." style="width:100%;margin:10px 0 18px;padding:12px;border:1px solid #d1d5db;border-radius:8px;resize:vertical"></textarea><button id="analyzeButton" class="primary-button">Analyze selected resumes</button><p id="resumeStatus" class="status" aria-live="polite"></p></div>
-      <div id="candidateProfile" class="panel hidden"><h2>Extracted Candidate Profiles</h2><div id="candidatePreviews"></div></div>
+      <div class="panel">
+        <h2>Upload resumes</h2>
+        <label class="upload-box" for="resumeInput">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+          <strong>Select one or more PDF or DOCX resumes</strong>
+          <span>Analyze first, then save each candidate from the profile preview.</span>
+          <input type="file" id="resumeInput" accept=".pdf,.docx" multiple>
+        </label>
+        <label for="resumeText">Or paste one resume</label>
+        <textarea id="resumeText" rows="8" placeholder="Paste resume text here..." style="margin:10px 0 18px"></textarea>
+        <button id="analyzeButton" class="primary-button">Analyze selected resumes</button>
+        <p id="resumeStatus" class="status" aria-live="polite"></p>
+      </div>
+      <div id="candidateProfile" class="panel hidden">
+        <h2>Extracted Candidate Profiles</h2>
+        <div id="candidatePreviews"></div>
+      </div>
     </section>
-    <section id="matches" class="page"><div class="page-header"><div><h1>Candidate and job matching</h1><p>Save job descriptions, choose a candidate and a job description, then run the match.</p></div></div><div class="panel"><h2>Add job descriptions</h2><label for="jobDescriptionFiles">Upload multiple descriptions (TXT, PDF, DOCX)</label><input id="jobDescriptionFiles" type="file" accept=".txt,.pdf,.docx" multiple><button id="uploadDescriptionsButton" class="secondary-button" type="button">Upload descriptions</button><hr style="border:0;border-top:1px solid #e5e7eb;margin:22px 0"><h3>Add a description manually</h3><div class="form-grid"><label>Job title<input id="newJobTitle" type="text" placeholder="Senior Backend Engineer"></label><label>Experience required<input id="newJobExperience" type="text" placeholder="5+ years"></label></div><label for="newJobDescription">Job description</label><textarea id="newJobDescription" rows="8" style="width:100%;margin:10px 0;padding:12px;border:1px solid #d1d5db;border-radius:8px"></textarea><button id="saveDescriptionButton" class="primary-button" type="button">Save job description</button><p id="descriptionStatus" class="status" aria-live="polite"></p></div><div class="panel"><h2>Saved job descriptions</h2><div id="savedDescriptionList" class="muted">Loading job descriptions...</div></div><div id="pairMatcher"></div></section>
-    <section id="applications" class="page"><div class="page-header"><div><h1>Applications</h1><p>Track approved and submitted applications.</p></div></div><div class="panel empty-state"><h3>No applications yet</h3><p>Approved applications will appear here.</p></div></section>
+
+    <!-- Matches -->
+    <section id="matches" class="page">
+      <div class="page-header"><div><h1>Candidate and job matching</h1><p>Save job descriptions, choose a candidate and a job description, then run the match.</p></div></div>
+      <div class="panel">
+        <h2>Add job descriptions</h2>
+        <label for="jobDescriptionFiles">Upload multiple descriptions (TXT, PDF, DOCX)</label>
+        <input id="jobDescriptionFiles" type="file" accept=".txt,.pdf,.docx" multiple>
+        <button id="uploadDescriptionsButton" class="secondary-button" type="button" style="margin-top:10px">Upload descriptions</button>
+        <hr>
+        <h3>Add a description manually</h3>
+        <div class="form-grid">
+          <label>Job title<input id="newJobTitle" type="text" placeholder="Senior Backend Engineer"></label>
+          <label>Experience required<input id="newJobExperience" type="text" placeholder="5+ years"></label>
+        </div>
+        <label for="newJobDescription">Job description</label>
+        <textarea id="newJobDescription" rows="8" style="margin:10px 0"></textarea>
+        <button id="saveDescriptionButton" class="primary-button" type="button">Save job description</button>
+        <p id="descriptionStatus" class="status" aria-live="polite"></p>
+      </div>
+      <div class="panel">
+        <h2>Saved job descriptions</h2>
+        <div id="savedDescriptionList" class="muted">Loading job descriptions...</div>
+      </div>
+      <div id="pairMatcher"></div>
+    </section>
+
+    <!-- Applications -->
+    <section id="applications" class="page">
+      <div class="page-header"><div><h1>Applications</h1><p>Track approved and submitted applications.</p></div></div>
+      <div class="panel empty-state">
+        <div class="empty-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22 11 13 2 9 22 2z"/></svg>
+        </div>
+        <h3>No applications yet</h3>
+        <p>Approved applications will appear here.</p>
+      </div>
+    </section>
   </main>
 </div>
 <script src="/static/js/app.js"></script>
@@ -59,7 +168,7 @@
     if(document.getElementById('v162Preferences')) return;
     const page=candidatePage(); if(!page) { console.error('v1.6.2: Candidate page not found'); return; }
     const panel=document.createElement('div'); panel.id='v162Preferences'; panel.className='panel'; panel.style.marginTop='20px';
-    panel.innerHTML='<h2>Job Preferences</h2><p>Saved locally and used for job matching.</p><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px"><label><strong>Preferred Role</strong><input id="preferredRole" type="text" placeholder="Python Backend Developer" style="width:100%;margin-top:6px"></label><label><strong>Preferred Location</strong><input id="preferredLocation" type="text" placeholder="Bengaluru" style="width:100%;margin-top:6px"></label><label><strong>Minimum Match (%)</strong><input id="minimumMatch" type="number" min="0" max="100" value="80" style="width:100%;margin-top:6px"></label></div><p id="v162PrefStatus" class="status"></p>';
+    panel.innerHTML='<h2>Job Preferences</h2><p class="muted">Saved locally and used for job matching.</p><div class="form-grid"><label><strong>Preferred Role</strong><input id="preferredRole" type="text" placeholder="Python Backend Developer"></label><label><strong>Preferred Location</strong><input id="preferredLocation" type="text" placeholder="Bengaluru"></label><label><strong>Minimum Match (%)</strong><input id="minimumMatch" type="number" min="0" max="100" value="80"></label></div><p id="v162PrefStatus" class="status"></p>';
     page.appendChild(panel);
     try{
       const p=await api('/api/preferences');
@@ -71,10 +180,10 @@
     [preferredRole,preferredLocation,minimumMatch].forEach(x=>x.addEventListener('change',save));
   }
   async function dashboard(){
-    try{const d=await api('/api/jobs/dashboard'); const page=findPage('dashboard'); if(!page)return; let box=document.getElementById('v162Dash'); if(!box){box=document.createElement('div');box.id='v162Dash';box.className='panel';box.style.marginTop='18px';page.appendChild(box);} box.innerHTML='<h2>Job Pipeline</h2><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px"><div><strong>Analyzed</strong><br>'+d.jobs_analyzed+'</div><div><strong>Review</strong><br>'+d.review+'</div><div><strong>Applied</strong><br>'+d.applied+'</div><div><strong>Interviews</strong><br>'+d.interviews+'</div><div><strong>Offers</strong><br>'+d.offers+'</div><div><strong>Avg Match</strong><br>'+(d.average_score==null?'N/A':d.average_score+'%')+'</div></div>';}catch(e){console.error(e)}
+    try{const d=await api('/api/jobs/dashboard'); const page=findPage('dashboard'); if(!page)return; let box=document.getElementById('v162Dash'); if(!box){box=document.createElement('div');box.id='v162Dash';box.className='panel';box.style.marginTop='18px';page.appendChild(box);} box.innerHTML='<h2>Job Pipeline</h2><div class="stats" style="margin-bottom:0"><div class="stat-card"><div class="stat-icon stat-icon--brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="stat-body"><span>Analyzed</span><strong>'+d.jobs_analyzed+'</strong></div></div><div class="stat-card"><div class="stat-icon stat-icon--amber"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></div><div class="stat-body"><span>Review</span><strong>'+d.review+'</strong></div></div><div class="stat-card"><div class="stat-icon stat-icon--green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><div class="stat-body"><span>Applied</span><strong>'+d.applied+'</strong></div></div><div class="stat-card"><div class="stat-icon stat-icon--blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg></div><div class="stat-body"><span>Interviews</span><strong>'+d.interviews+'</strong></div></div><div class="stat-card"><div class="stat-icon stat-icon--brand"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg></div><div class="stat-body"><span>Offers</span><strong>'+d.offers+'</strong></div></div><div class="stat-card"><div class="stat-icon stat-icon--blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div><div class="stat-body"><span>Avg Match</span><strong>'+(d.average_score==null?'N/A':d.average_score+'%')+'</strong></div></div></div>';}catch(e){console.error(e)}
   }
   async function queue(){
-    const page=findPage('matches'); if(!page)return; let box=document.getElementById('v162Queue'); if(!box){box=document.createElement('div');box.id='v162Queue';box.className='panel';box.style.marginTop='18px';page.appendChild(box);} try{const rows=await api('/api/jobs/queue');box.innerHTML='<h2>Saved Job Review Queue</h2>'+(rows.length?rows.map(j=>'<div style="border-top:1px solid #ddd;padding:12px 0"><strong>'+String(j.title||'Job')+'</strong> <span style="float:right">'+(j.score==null?'N/A':j.score+'%')+'</span><br>'+String(j.company||'Company not specified')+' | <strong>'+String(j.status||'NEW')+'</strong></div>').join(''):'<p>No saved jobs yet.</p>');}catch(e){box.innerHTML='<h2>Saved Job Review Queue</h2><p>Queue API error: '+e.message+'</p>';}
+    const page=findPage('matches'); if(!page)return; let box=document.getElementById('v162Queue'); if(!box){box=document.createElement('div');box.id='v162Queue';box.className='panel';box.style.marginTop='18px';page.appendChild(box);} try{const rows=await api('/api/jobs/queue');box.innerHTML='<h2>Saved Job Review Queue</h2>'+(rows.length?rows.map(j=>'<div class="queue-card"><div class="queue-header"><div><strong style="font-size:15px">'+String(j.title||'Job')+'</strong><div class="queue-meta">'+String(j.company||'Company not specified')+' | <strong>'+String(j.status||'NEW')+'</strong></div></div><span class="queue-score">'+(j.score==null?'N/A':j.score+'%')+'</span></div></div>').join(''):'<p class="muted">No saved jobs yet.</p>');}catch(e){box.innerHTML='<h2>Saved Job Review Queue</h2><p>Queue API error: '+e.message+'</p>';}
   }
   function init(){ console.log('JOBAGENT v1.6.2 UI PATCH LOADED'); injectPreferences(); dashboard(); queue(); document.querySelectorAll('.nav-item').forEach(n=>n.addEventListener('click',()=>setTimeout(()=>{injectPreferences();dashboard();queue()},0))); }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',init);else init();
