@@ -25,11 +25,16 @@ def _fingerprint(text: str) -> str:
     normalized = ' '.join(text.casefold().split())
     return hashlib.sha256(normalized.encode('utf-8')).hexdigest()
 
-def _find_duplicate_candidate(text_fingerprint: str, file_fingerprint: str | None = None):
+def _find_duplicate_candidate(
+    text_fingerprint: str,
+    uploaded_by: str,
+    file_fingerprint: str | None = None,
+):
     with session() as s:
         rows = s.execute(
             select(Candidate, StoredFile.data)
             .outerjoin(StoredFile, Candidate.storage_key == StoredFile.key)
+            .where(Candidate.uploaded_by == uploaded_by)
             .order_by(Candidate.created_at)
         ).all()
         for row, stored_content in rows:
@@ -105,7 +110,7 @@ async def analyze(file: UploadFile = File(...), user: dict = Depends(current_use
         text = _read_resume(content, original.name)
         source_fingerprint = _fingerprint(text)
         file_fingerprint = hashlib.sha256(content).hexdigest()
-        existing = _find_duplicate_candidate(source_fingerprint, file_fingerprint)
+        existing = _find_duplicate_candidate(source_fingerprint, user['id'], file_fingerprint)
         if existing:
             return _candidate_result(existing, text, duplicate=True)
         profile = analyze_with_gemini(text).model_dump()
@@ -124,7 +129,7 @@ async def analyze_text(text: str = File(...), user: dict = Depends(current_user)
         raise HTTPException(413, 'The pasted resume is larger than 5 MB.')
     try:
         source_fingerprint = _fingerprint(resume_text)
-        existing = _find_duplicate_candidate(source_fingerprint)
+        existing = _find_duplicate_candidate(source_fingerprint, user['id'])
         if existing:
             return _candidate_result(existing, resume_text, duplicate=True)
         profile = analyze_with_gemini(resume_text).model_dump()
@@ -163,7 +168,7 @@ async def save_candidate(
         file_fingerprint = None
 
     source_fingerprint = _fingerprint(resume_text)
-    existing = _find_duplicate_candidate(source_fingerprint, file_fingerprint)
+    existing = _find_duplicate_candidate(source_fingerprint, user['id'], file_fingerprint)
     if existing:
         return _candidate_result(existing, resume_text, duplicate=True)
 
@@ -190,9 +195,11 @@ async def save_candidate(
 
 
 @router.get('')
-def list_candidates(_: dict = Depends(current_user)):
+def list_candidates(user: dict = Depends(current_user)):
     with session() as s:
-        rows = s.scalars(select(Candidate).order_by(Candidate.created_at.desc())).all()
+        rows = s.scalars(select(Candidate).where(
+            Candidate.uploaded_by == user['id'],
+        ).order_by(Candidate.created_at.desc())).all()
         return [{
             'id': r.id,
             'name': r.name or 'Unknown candidate',
@@ -205,13 +212,37 @@ def list_candidates(_: dict = Depends(current_user)):
             'created_at': r.created_at.isoformat(),
         } for r in rows]
 
+@router.get('/{candidate_id}/view')
+def view_resume(candidate_id: str, user: dict = Depends(current_user)):
+    with session() as s:
+        row = s.scalar(select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.uploaded_by == user['id'],
+        ))
+    if not row:
+        raise HTTPException(404, 'Resume not found.')
+    key, name = row.storage_key, row.original_filename
+    if not key:
+        raise HTTPException(404, 'This candidate was created from pasted resume text; no file is available.')
+    content_type = TYPES.get(Path(key).suffix.lower(), 'application/octet-stream')
+    safe = ''.join(c if c.isalnum() or c in '._-' else '_' for c in name)
+    audit(user, 'resume_view', candidate_id)
+    return Response(
+        storage.get_file(key),
+        media_type=content_type,
+        headers={'Content-Disposition': f'inline; filename="{safe}"'},
+    )
+
 @router.get('/{candidate_id}/download')
 def download(candidate_id: str, user: dict = Depends(current_user)):
     with session() as s:
-        row = s.get(Candidate, candidate_id)
-        if not row:
-            raise HTTPException(404, 'Resume not found.')
-        key, name = row.storage_key, row.original_filename
+        row = s.scalar(select(Candidate).where(
+            Candidate.id == candidate_id,
+            Candidate.uploaded_by == user['id'],
+        ))
+    if not row:
+        raise HTTPException(404, 'Resume not found.')
+    key, name = row.storage_key, row.original_filename
     if not key:
         raise HTTPException(404, 'This candidate was created from pasted resume text; no file is available.')
     audit(user, 'resume_download', candidate_id)

@@ -18,6 +18,7 @@ from app.models.candidate import CandidateProfile, TechnicalSkill
 
 @pytest.fixture
 def client(monkeypatch):
+    auth._attempts.clear()
     engine = create_engine(
         'sqlite://',
         connect_args={'check_same_thread': False},
@@ -136,6 +137,22 @@ def test_analyze_duplicate_pasted_resume_does_not_create_another_candidate(clien
     assert duplicate.json()['candidate_id'] == saved.json()['candidate_id']
     assert len(analyzed_text) == 1
     assert len(client.get('/api/resumes').json()) == 1
+
+
+def test_resume_duplicate_detection_is_scoped_to_the_signed_in_user(client, monkeypatch):
+    profile = CandidateProfile(candidate_name='Ada Lovelace')
+    monkeypatch.setattr(resumes_api, 'analyze_with_gemini', lambda _: profile)
+    text = 'Ada Lovelace builds reliable Python systems.'
+    preview = client.post('/api/resumes/analyze-text', data={'text': text})
+    saved = client.post('/api/resumes/save', data={
+        'profile': json.dumps(preview.json()),
+        'text': text,
+    })
+    assert saved.status_code == 200
+    owner_key = client.get('/api/resumes').json()[0]['uploaded_by']
+    fingerprint = resumes_api._fingerprint(text)
+    assert resumes_api._find_duplicate_candidate(fingerprint, owner_key).id == saved.json()['candidate_id']
+    assert resumes_api._find_duplicate_candidate(fingerprint, 'another-user') is None
 
 def test_uploaded_resume_is_stored_only_after_save_button_action(client, monkeypatch):
     profile = CandidateProfile(

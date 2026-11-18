@@ -13,12 +13,14 @@ import app.api.auth as auth_api
 import app.api.jobs as jobs_api
 import app.api.resumes as resumes_api
 import app.auth as auth
+import app.recruiter.router as recruiter_api
 from app.database.db import Base
 from app.database.tables import Candidate
 
 
 @pytest.fixture
 def pairing_client(monkeypatch):
+    auth._attempts.clear()
     engine = create_engine(
         'sqlite://',
         connect_args={'check_same_thread': False},
@@ -43,6 +45,8 @@ def pairing_client(monkeypatch):
     monkeypatch.setattr(auth_api, 'session', session)
     monkeypatch.setattr(jobs_api, 'session', session)
     monkeypatch.setattr(resumes_api, 'session', session)
+    monkeypatch.setattr(recruiter_api, 'session', session)
+    monkeypatch.setattr(recruiter_api, 'audit', lambda *_args: None)
     monkeypatch.delenv('BOOTSTRAP_ADMIN_EMAIL', raising=False)
     monkeypatch.delenv('ALLOWED_EMAIL_DOMAINS', raising=False)
 
@@ -51,6 +55,7 @@ def pairing_client(monkeypatch):
     test_app.include_router(auth_api.router)
     test_app.include_router(resumes_api.router)
     test_app.include_router(jobs_api.router)
+    test_app.include_router(recruiter_api.router)
 
     with TestClient(test_app) as client:
         assert client.post('/api/auth/signup', json={
@@ -178,3 +183,40 @@ def test_duplicate_job_descriptions_are_not_saved(pairing_client):
 
     with test_session() as db_session:
         assert db_session.query(jobs_api.JobDescription).count() == 1
+
+
+def test_job_description_duplicates_are_checked_across_recruiter_jobs(pairing_client):
+    client, test_session, _ = pairing_client
+    recruiter_job = client.post('/api/recruiter/jobs', json={
+        'title': 'Backend Engineer',
+        'company': 'Example Inc.',
+        'description': 'Build secure backend services with Python and PostgreSQL.',
+    })
+    assert recruiter_job.status_code == 201
+
+    uploaded = client.post('/api/jobs/descriptions', json={
+        'title': 'Backend Engineer role',
+        'description': ' build secure backend services with Python and PostgreSQL. ',
+    })
+    assert uploaded.status_code == 200
+    assert uploaded.json()['duplicate'] is True
+    assert uploaded.json()['id'] == recruiter_job.json()['id']
+
+    repeated_analysis = client.post('/api/recruiter/jobs/analyze', json={
+        'description': 'BUILD SECURE BACKEND SERVICES WITH PYTHON AND POSTGRESQL.',
+    })
+    assert repeated_analysis.status_code == 409
+    uploaded_description = client.post('/api/jobs/descriptions', json={
+        'title': 'Frontend Engineer',
+        'description': 'Build accessible web applications using React and TypeScript.',
+    })
+    assert uploaded_description.status_code == 200
+    duplicate_recruiter_job = client.post('/api/recruiter/jobs', json={
+        'title': 'Frontend Engineer',
+        'company': 'Other Inc.',
+        'description': 'BUILD ACCESSIBLE WEB APPLICATIONS USING REACT AND TYPESCRIPT.',
+    })
+    assert duplicate_recruiter_job.status_code == 409
+    with test_session() as db_session:
+        assert db_session.query(jobs_api.JobDescription).count() == 1
+        assert db_session.query(recruiter_api.RecruiterJob).count() == 1

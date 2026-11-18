@@ -6,6 +6,7 @@ class JobProfile(BaseModel):
     company: str = ""
     location: str = ""
     work_mode: str = ""
+    employment_type: str = ""
     minimum_experience_years: Optional[float] = Field(default=None, ge=0)
     maximum_experience_years: Optional[float] = Field(default=None, ge=0)
     required_skills: list[str] = []

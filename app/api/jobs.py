@@ -15,6 +15,7 @@ from app.database.db import session
 from app.database.applications import list_applications, save_application
 from app.database.jobs import list_jobs,save_analysis,update_status,delete_job,dashboard
 from app.database.tables import Candidate, JobDescription
+from app.recruiter.models import RecruiterJob
 from app.extractors.resume_extractor import extract_text
 router=APIRouter(prefix='/api/jobs',tags=['jobs'])
 class Match(BaseModel):job_description:str;candidate_profile:dict;preferred_location:str='';threshold:int=80;job_url:str=''
@@ -68,17 +69,44 @@ def _description_data(row):
 def _normalized_description(description: str) -> str:
     return ' '.join(description.casefold().split())
 
-def _find_duplicate_description(description: str):
+def _find_duplicate_description(description: str, uploaded_by: str):
     normalized = _normalized_description(description)
     with session() as s:
-        rows = s.scalars(select(JobDescription).order_by(JobDescription.created_at)).all()
-        return next((row for row in rows
+        rows = s.scalars(select(JobDescription).where(
+            JobDescription.uploaded_by == uploaded_by,
+        ).order_by(JobDescription.created_at)).all()
+        duplicate = next((row for row in rows
+                          if _normalized_description(row.description) == normalized), None)
+        if duplicate:
+            return duplicate
+        recruiter_jobs = s.scalars(select(RecruiterJob).where(
+            RecruiterJob.owner_key == uploaded_by,
+            RecruiterJob.description != '',
+        ).order_by(RecruiterJob.created_at)).all()
+        return next((row for row in recruiter_jobs
                      if _normalized_description(row.description) == normalized), None)
 
+def _duplicate_description_data(row):
+    if isinstance(row, RecruiterJob):
+        return {
+            'id': row.id,
+            'title': row.title,
+            'experience': (
+                f'{row.minimum_experience_years:g} years'
+                if row.minimum_experience_years is not None else ''
+            ),
+            'description': row.description,
+            'file': '',
+            'created_at': row.created_at.isoformat(),
+        }
+    return _description_data(row)
+
 @router.get('/descriptions')
-def list_descriptions(_: dict = Depends(current_user)):
+def list_descriptions(user: dict = Depends(current_user)):
     with session() as s:
-        rows = s.scalars(select(JobDescription).order_by(JobDescription.created_at.desc())).all()
+        rows = s.scalars(select(JobDescription).where(
+            JobDescription.uploaded_by == user['id'],
+        ).order_by(JobDescription.created_at.desc())).all()
         return [_description_data(row) for row in rows]
 
 @router.post('/descriptions')
@@ -91,9 +119,9 @@ def create_description(req: JobDescriptionInput, user: dict = Depends(current_us
         raise HTTPException(400, 'Enter the job description.')
     if len(description.encode('utf-8')) > MAX_DESCRIPTION_BYTES:
         raise HTTPException(413, 'The job description is larger than 5 MB.')
-    existing = _find_duplicate_description(description)
+    existing = _find_duplicate_description(description, user['id'])
     if existing:
-        return {**_description_data(existing), 'duplicate': True}
+        return {**_duplicate_description_data(existing), 'duplicate': True}
     with session() as s:
         row = JobDescription(title=title[:255], experience=req.experience.strip()[:120],
                              description=description, uploaded_by=user['id'])
@@ -131,9 +159,9 @@ async def upload_descriptions(files: list[UploadFile] = File(...),
                     description = extract_text(path).strip()
             if not description:
                 raise HTTPException(400, 'No readable text was found in the job description.')
-            existing = _find_duplicate_description(description)
+            existing = _find_duplicate_description(description, user['id'])
             if existing:
-                results.append({'ok': True, 'duplicate': True, **_description_data(existing)})
+                results.append({'ok': True, 'duplicate': True, **_duplicate_description_data(existing)})
                 continue
             experience_match = EXPERIENCE_RE.search(description)
             experience = experience_match.group(0) if experience_match else ''

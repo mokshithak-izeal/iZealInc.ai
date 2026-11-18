@@ -11,6 +11,18 @@ for prefix in ('postgres://', 'postgresql://', 'postgresql+psycopg://'):
 engine = create_engine(url, pool_pre_ping=True)
 SessionLocal = sessionmaker(bind=engine, expire_on_commit=False)
 
+
+def migration_engine():
+    migration_url = os.getenv('DATABASE_URL_UNPOOLED')
+    if not migration_url:
+        return engine
+    for prefix in ('postgres://', 'postgresql://', 'postgresql+psycopg://'):
+        if migration_url.startswith(prefix):
+            migration_url = 'postgresql+psycopg2://' + migration_url[len(prefix):]
+            break
+    return create_engine(migration_url, pool_pre_ping=True)
+
+
 class Base(DeclarativeBase):
     pass
 
